@@ -1,0 +1,169 @@
+// Package client is the one that atually mines bitcoin
+// it receives a task from the server and creates associated merkel root hash
+// then tests succesive nonces
+//
+package client
+
+import (
+	"bytes"
+	"coin"
+	"encoding/binary"
+	"fmt"
+	"time"
+	"os"
+)
+
+// offsets of parts of the blockheader
+const (
+	version   = 4  // 4 byte Version
+	prevblk   = 36 // 32 byte previous block hash
+	merkle    = 68 // 32 byte merkle root hash
+	timestamp = 72 // 4 byte Unix time
+	bits      = 76 // 4 byte target (encoded) for difficulty rating
+	nonce     = 80 // 4 byte nonce used
+)
+
+// site specific, search data
+const (
+	cores = 2          //  goroutines used per job - set to # cores
+	top   = 0xffffffff // topmost uint32 = 2^32-1
+)
+
+// site specific, search data
+var (
+	N      uint32 = 50 //  total number in pool
+	cls    uint32 = 36 // the residue class of this server
+	share  []byte      // easy target
+	target []byte      // wanted hash target
+	done = make(chan struct{})  // cancellation channel
+)
+
+type Job struct {
+	Block []byte	// Blockheader for this job (80 bytes)
+	Hash  []byte	// Receives the computed hash (32 bytes)
+}
+
+type shareData struct {
+	core  uint32
+	nonce uint32
+	time  string
+	hash  []byte
+}
+
+// Search takes task t's blockheader and looks for a winning hash with
+// this client's preset residue class. 
+func Search(t coin.Task) {
+	foundit := make(chan bool, cores) // signal to end search
+	foundblock := make(chan []byte)   //  returned on success
+	shares := make(chan shareData)    //  discovered shares
+	target = t.Target
+	share = t.Share
+	var i uint32
+
+	for i = 0; i < cores; i++ { // set off the cores searches
+		go func(i uint32) {
+			j := Job{}         // returns a pointer
+			j.PrepSearch(t) // make byte seq w/ Merkle root data
+			start := time.Now()
+			nce := cls + i*N   // starting nonce
+			step := cores * N  // progrssion
+			last := ((top-nce)/step)*step + nce
+			fmt.Printf("goroutine: %d start from: %d at  %s\n",
+				i, nce, start)
+			for {
+				if cancelled() {
+					return
+				}
+				foundShare, foundHash, hash := j.CheckHashAt(nce)
+				if foundHash {
+					end := time.Now()
+					duration := time.Since(start).String()
+					fmt.Printf("*** Found nonce = %d\n*** At %s\n*** Duration: %s\n",
+						nce, end, duration)
+					foundit <- true // signal success
+					close(foundit)  // and terminate search
+					foundblock <- j.Block
+					break
+				}
+				if foundShare {
+					shares <- shareData{i, nce,
+						time.Since(start).String(), hash}
+				}
+				if nce == last {
+					fmt.Printf("* [%d] quitting, nonce:%d hex:%x\n", i, nce, nce)
+					foundit <- false // signal failure
+					break
+				}
+				nce += step
+			}
+		}(i)
+	}
+	go func() {
+		for {
+			data := <-shares
+			fmt.Printf("* [%d] share at nonce %d, after: %s\n%x\n",
+				data.core, data.nonce, data.time, data.hash)
+		}
+	}()
+
+	// main handles search results
+	for i := 0; i < cores; i++ {
+		success := <-foundit
+		if success {
+			fmt.Printf("Bye! block:\n%x", <-foundblock)
+			break
+		}
+	}
+
+	// main also polls for a cancellation signal
+	go func() {
+		os.Stdin.Read(make([]byte, 1)) // read a single byte
+		fmt.Println("GOT A CALL!")
+		close(done)
+	}()
+}
+
+// PrepSearch loads j.Block with data from task t. It is called
+// at the start of any search and may be recalled to regenerate the
+// Block if nonce values exhaust their 32-bit limit
+func (j *Job) PrepSearch(t coin.Task) {
+	j.Block = make([]byte, 80)
+	copy(j.Block, t.BH)              //get the entire struct from here
+	freshMerkle := buildMerkle(t.MH) // add freshly generated full merkle root
+	copy(j.Block[prevblk:merkle], freshMerkle)
+}
+
+// WriteUint32 is a convenience: write v into 4 bytes of slice
+func WriteUint32(slice []byte, v uint32) {
+	binary.LittleEndian.PutUint32(slice, v)
+}
+
+func cancelled() bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
+}
+
+// CheckHashAt nonce n loads this on j.Block then computes the double SHA256 hash.
+// It returns hard=true for a win, easy=true for a share win together
+// with the hash itself
+func (j *Job) CheckHashAt(n uint32) (easy bool, hard bool, thehash []byte) {
+	WriteUint32(j.Block[bits:nonce], n)
+	j.Hash = coin.Reverse(coin.DoubleSha256(j.Block))
+	thehash = j.Hash
+	easy = bytes.Compare(j.Hash, share) < 0  // hash < share target
+	hard = bytes.Compare(j.Hash, target) < 0 // hash < target
+	return
+}
+
+// buildMerkle each client needs to rebuild the root hash
+// using data from the server when completed, this will depend on
+// the client's identity - and a construction of a bitcoin account
+func buildMerkle(merk []byte) []byte {
+	// right now, just all of it
+	// later will use the coinb data as well
+	return coin.Reverse(merk) // was not reversed to allow this step
+}
