@@ -84,8 +84,8 @@ func TestCheckHashAt(t *testing.T) {
 	// client side
 	j := Job{}         // returns a pointer
 	j.PrepSearch(task) // make byte sequence with Merkle root data
-	if _, foundhash, _ := j.CheckHashAt(try.nce); foundhash != true {
-		t.Errorf("wanted hash (%v) = %v", true, foundhash)
+	if res := j.CheckHashAt(try.nce); res.goodHash != true {
+		t.Errorf("wanted hash (%v) = %v", true, res.goodHash)
 	}
 }
 

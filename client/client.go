@@ -51,20 +51,25 @@ type shareData struct {
 	hash  []byte
 }
 
+
+type report struct{
+	success bool
+	block []byte
+}
+
 // Search takes uses the blockheader from task t to look for a winning hash with
 // this client's preset residue class.  It exits with either
 // (1) no solution and entire nonce range searched, or
 // (2) a solution is found
 func Search(t coin.Task) {
-	foundit := make(chan bool, cores) // signal to end search
-	foundblock := make(chan []byte)   //  returned on success
+	foundit := make(chan report, cores) // signal to end search
 	shares := make(chan shareData)    //  discovered shares
 
 	for i := uint32(0); i < cores; i++ { // set off the cores searches
-		go workon(t, i, foundit, foundblock, shares)
+		go workon(t, i, foundit, shares)
 	}
 
-	// goroutine colecting share finds
+	// goroutine collecting share finds
 	go func() {
 		for {
 			data := <-shares
@@ -75,9 +80,9 @@ func Search(t coin.Task) {
 
 	// main handles search results
 	for i := 0; i < cores; i++ {
-		success := <-foundit
-		if success {
-			fmt.Printf("Bye! block:\n%x\n", <-foundblock)
+		endwith := <-foundit
+		if endwith.success {
+			fmt.Printf("Bye! block:\n%x\n", endwith.block)
 			break
 		}
 	}
@@ -87,7 +92,7 @@ func Search(t coin.Task) {
 // communicates with calling routine via channels
 // TODO - make this cycle rather than quit,
 // TODO - make this respond to stop signal
-func workon(t coin.Task, i uint32, foundit chan bool, foundblock chan []byte, shares chan shareData) {
+func workon(t coin.Task, i uint32, foundit chan report, shares chan shareData) {
 	j := Job{}
 	j.PrepSearch(t) // make byte seq w/ Merkle root data
 	start := time.Now()
@@ -97,24 +102,22 @@ func workon(t coin.Task, i uint32, foundit chan bool, foundblock chan []byte, sh
 	fmt.Printf("goroutine: %d start from: %d at  %s\n",
 		i, nce, start)
 	for {
-		foundShare, foundHash, hash := j.CheckHashAt(nce)
-		if foundHash {
+		gets := j.CheckHashAt(nce)
+		if gets.goodHash {
 			end := time.Now()
 			duration := time.Since(start).String()
-			fmt.Printf("*** [%d] Found nonce = %d\n*** At %s\n*** Duration: %s\n",
-				i, nce, end, duration)
-			foundit <- true // signal success
-			close(foundit)  // and terminate search
-			foundblock <- j.Block
+			fmt.Printf("*** [%d] Found nonce = %d\n*** At %s\n*** Duration: %s\n*** Hash: %x",
+				i, nce, end, duration, gets.hash)
+			foundit <- report{true,j.Block}	// signal success
+			close(foundit)  				// and terminate search
 			break
 		}
-		if foundShare {
-			shares <- shareData{i, nce,
-				time.Since(start).String(), hash}
+		if gets.shareHash {
+			shares <- shareData{i, nce, time.Since(start).String(), gets.hash}
 		}
 		if nce == last {
 			fmt.Printf("* [%d] quitting, nonce:%d hex:%x\n", i, nce, nce)
-			foundit <- false // signal failure
+			foundit <- report{false,nil} // signal failure
 			break
 		}
 		nce += step
@@ -138,23 +141,36 @@ func writeUint32(slice []byte, v uint32) {
 	binary.LittleEndian.PutUint32(slice, v)
 }
 
+
+type mineData struct{
+	shareHash bool
+	goodHash bool
+	hash []byte
+}
 // CheckHashAt includes the given nonce in the block held by job j. Using
 // the current share and target respectively, it calculates the block hash
 // and returns easy=true / hard=true if the hash is below share / target
 // resp. Byte sequence thehash returns the computed hash
-func (j *Job) CheckHashAt(nonce uint32) (easy bool, hard bool, thehash []byte) {
+func (j *Job) CheckHashAt(nonce uint32) mineData { //(easy bool, hard bool, thehash []byte) {
 	writeUint32(j.Block[b_bits:b_nonce], nonce)
 	hash, err := coin.DoubleSha256(j.Block)
 	if err != nil {
 		log.Fatal(err)
 	}
 	j.hash = coin.Reverse(hash)
-
-	// named returns
-	thehash = j.hash
-	easy = bytes.Compare(j.hash, j.share) < 0  // hash < share target
-	hard = bytes.Compare(j.hash, j.target) < 0 // hash < target
-	return
+	// return this as  mineData object
+	out := mineData {
+		bytes.Compare(j.hash, j.share) < 0,  // hash < share target
+		bytes.Compare(j.hash, j.target) < 0, // hash < target
+		j.hash,
+	}
+	return out
+	// // named returns
+	// out.hash = j.hash
+	// thehash = j.hash
+	// easy = bytes.Compare(j.hash, j.share) < 0  // hash < share target
+	// hard = bytes.Compare(j.hash, j.target) < 0 // hash < target
+	// return
 }
 
 // buildMerkle each client needs to rebuild the root hash
