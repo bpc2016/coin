@@ -1,8 +1,8 @@
 // Package Client is the one that actually mines bitcoin.
 // It receives a task from the server and creates associated merkle root hash
-// then tests succesive nonces. The idea is to divide the search between N clients, 
-// each assigned a search-class between 0 and N-1. The client examines nonces 
-// starting from Cls in steps of N to the ceiling of 0xffffffff 
+// then tests succesive nonces. The idea is to divide the search between N clients,
+// each assigned a search-class between 0 and N-1. The client examines nonces
+// starting from Cls in steps of N to the ceiling of 0xffffffff
 package client
 
 import (
@@ -34,11 +34,11 @@ const (
 // the pool.
 var (
 	N   uint32 = 100 // total number in pool
-	Cls uint32 = 28  // the residue class of this server
+	Cls uint32 = 28  // the residue class of this client
 )
 
 type Job struct {
-	Block  []byte // Blockheader for this job (80 bytes)
+	Block  []byte // blockheader for this job (80 bytes)
 	hash   []byte // Receives the computed hash (32 bytes)
 	share  []byte // easy target
 	target []byte // wanted hash target
@@ -51,19 +51,20 @@ type shareData struct {
 	hash  []byte
 }
 
-
-type report struct{
+type report struct {
 	success bool
-	block []byte
+	block   []byte
 }
 
-// Search takes uses the blockheader from task t to look for a winning hash with
+// Search uses the blockheader from task t to look for a winning hash with
 // this client's preset residue class.  It exits with either
+//
 // (1) no solution and entire nonce range searched, or
+//
 // (2) a solution is found
 func Search(t coin.Task) {
-	foundit := make(chan report, cores) // signal to end search
-	shares := make(chan shareData)    //  discovered shares
+	foundit := make(chan report, cores) // results of search + search signal
+	shares := make(chan shareData)      // discovered shares
 
 	for i := uint32(0); i < cores; i++ { // set off the cores searches
 		go workon(t, i, foundit, shares)
@@ -73,8 +74,7 @@ func Search(t coin.Task) {
 	go func() {
 		for {
 			data := <-shares
-			fmt.Printf("* [%d] share at nonce %d, after: %s\n%x\n",
-				data.core, data.nonce, data.time, data.hash)
+			fmt.Printf("* [%d] share at nonce %d, after: %s\n%x\n", data.core, data.nonce, data.time, data.hash)
 		}
 	}()
 
@@ -88,41 +88,43 @@ func Search(t coin.Task) {
 	}
 }
 
-// workon performs a search of task t starting from nonce Cls+i*N
-// communicates with calling routine via channels
-// TODO - make this cycle rather than quit,
-// TODO - make this respond to stop signal
-func workon(t coin.Task, i uint32, foundit chan report, shares chan shareData) {
-	j := Job{}
-	j.PrepSearch(t) // make byte seq w/ Merkle root data
+// workon performs a search of task t starting from nonce Cls+gor*N
+// and communicates its finds and shares via channels
+func workon(t coin.Task, gor uint32, foundit chan report, shares chan shareData) {
+	var j Job            //j := Job{}
+	j.PrepSearch(t)      // make byte seq w/ Merkle root data
+	nonce := Cls + gor*N // starting nononce
+	step := cores * N    // progression
+	topNonce := ((top-nonce)/step)*step + nonce
+	// note our start
 	start := time.Now()
-	nce := Cls + i*N  // starting nonce
-	step := cores * N // progression
-	last := ((top-nce)/step)*step + nce
-	fmt.Printf("goroutine: %d start from: %d at  %s\n",
-		i, nce, start)
+	fmt.Printf("goroutine: %d start from: %d at  %s\n", gor, nonce, start)
+	// loop through  nonces
 	for {
-		gets := j.CheckHashAt(nce)
+		gets := j.CheckHashAt(nonce)
 		if gets.goodHash {
 			end := time.Now()
 			duration := time.Since(start).String()
-			fmt.Printf("*** [%d] Found nonce = %d\n*** At %s\n*** Duration: %s\n*** Hash: %x",
-				i, nce, end, duration, gets.hash)
-			foundit <- report{true,j.Block}	// signal success
-			close(foundit)  				// and terminate search
+			fmt.Printf("*** [%d] Found nonce = %d\n*** At %s\n*** After: %s\n*** Hash: %x\n",
+				gor, nonce, end, duration, gets.hash)
+			foundit <- report{true, j.Block} // signal success
+			close(foundit)                   // and terminate search
 			break
 		}
 		if gets.shareHash {
-			shares <- shareData{i, nce, time.Since(start).String(), gets.hash}
+			shares <- shareData{gor, nonce, time.Since(start).String(), gets.hash}
 		}
-		if nce == last {
-			fmt.Printf("* [%d] quitting, nonce:%d hex:%x\n", i, nce, nce)
-			foundit <- report{false,nil} // signal failure
+		if nonce == topNonce {
+			fmt.Printf("* [%d] quitting, nonce:%x\n", gor, nonce)
+			foundit <- report{false, nil} // signal failure
 			break
 		}
-		nce += step
+		nonce += step
 	}
 }
+
+// TODO - make this cycle rather than quit,
+// TODO - make this respond to stop signal
 
 // PrepSearch loads j.Block with data from task t. It is called
 // at the start of any search and may be recalled to regenerate the
@@ -130,7 +132,7 @@ func workon(t coin.Task, i uint32, foundit chan report, shares chan shareData) {
 func (j *Job) PrepSearch(t coin.Task) {
 	j.Block = make([]byte, 80)
 	copy(j.Block, t.BH)              //get the entire struct from here
-	freshMerkle := buildMerkle(t.MH) // add freshly generated full merkle root
+	freshMerkle := buildMerkle(t.MH) // add freshly generated full Merkle root
 	copy(j.Block[b_prevblk:b_merkle], freshMerkle)
 	j.target = t.Target // recall target, share
 	j.share = t.Share
@@ -141,17 +143,17 @@ func writeUint32(slice []byte, v uint32) {
 	binary.LittleEndian.PutUint32(slice, v)
 }
 
-
-type mineData struct{
+type mineData struct {
 	shareHash bool
-	goodHash bool
-	hash []byte
+	goodHash  bool
+	hash      []byte
 }
+
 // CheckHashAt includes the given nonce in the block held by job j. Using
 // the current share and target respectively, it calculates the block hash
-// and returns easy=true / hard=true if the hash is below share / target
-// resp. Byte sequence thehash returns the computed hash
-func (j *Job) CheckHashAt(nonce uint32) mineData { //(easy bool, hard bool, thehash []byte) {
+// and returns the mineData obj with fields shareHash (bool) if a hash below share
+// is found, goodHash (bool) if the hash is a winning one and hash ([]byte) the hashed value
+func (j *Job) CheckHashAt(nonce uint32) mineData {
 	writeUint32(j.Block[b_bits:b_nonce], nonce)
 	hash, err := coin.DoubleSha256(j.Block)
 	if err != nil {
@@ -159,18 +161,12 @@ func (j *Job) CheckHashAt(nonce uint32) mineData { //(easy bool, hard bool, theh
 	}
 	j.hash = coin.Reverse(hash)
 	// return this as  mineData object
-	out := mineData {
+	found := mineData{
 		bytes.Compare(j.hash, j.share) < 0,  // hash < share target
 		bytes.Compare(j.hash, j.target) < 0, // hash < target
 		j.hash,
 	}
-	return out
-	// // named returns
-	// out.hash = j.hash
-	// thehash = j.hash
-	// easy = bytes.Compare(j.hash, j.share) < 0  // hash < share target
-	// hard = bytes.Compare(j.hash, j.target) < 0 // hash < target
-	// return
+	return found
 }
 
 // buildMerkle each client needs to rebuild the root hash

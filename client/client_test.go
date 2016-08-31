@@ -193,11 +193,11 @@ var txHashes = []string{
 }
 
 func TestGetMerkle(t *testing.T) {
-	test := tests[4] // only one we have complete data for
+	test := tests[4] 				// only one we have complete data for
 	serverData := coin.InComing{
 		Version:   test.v,
 		PrevBlock: test.pb,
-		//MerkleRoot:   test.mr, // this is a case of no MR
+		//MerkleRoot:   test.mr, 	// this is a case of no MR
 		TimeStamp: test.tme,
 		Bits:      test.bits,
 		Share:     3,
@@ -225,9 +225,9 @@ func TestGetMerkle(t *testing.T) {
 
 // we use the new style: GetMerkle and Skeleton
 func TestMine(t *testing.T) {
-	test := tests[4] // only one we have complete data for
+	test := tests[4] 			// only one we have complete data for
 
-	// note that this has no MerkleRoot, as above ..
+								// note that this has no MerkleRoot, as above ..
 	serverData := coin.InComing{
 		Version:   test.v,
 		PrevBlock: test.pb,
