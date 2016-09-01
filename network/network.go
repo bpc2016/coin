@@ -24,7 +24,7 @@ func client(id int, load string, toServer chan int) {
 	for c := 0; c < 40; c++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 {
-			fmt.Printf("<%d> --> found it\n", id)
+			fmt.Printf("** %d *** FOUND it\n", id)
 			foundit = true
 			break
 		}
@@ -32,18 +32,17 @@ func client(id int, load string, toServer chan int) {
 		fmt.Println(id, " ", c)
 		// check for a stop order
 		if cancelled() {
-			fmt.Printf("(%d) got QUIT signal!\n", id)
 			break
 		}
 	}
 	if foundit {
 		toServer <- id // declare we are done
 	}
+	fmt.Printf("[%d] .. BYE\n", id)
 	toServer <- id
-	fmt.Printf("**[%d] .. BYE\n", id)
 }
 
-var done = make(chan struct{})
+var done = make(chan struct{}) // messages to clients
 
 // this will return false until channel done is closed
 func cancelled() bool {
@@ -55,6 +54,37 @@ func cancelled() bool {
 	}
 }
 
+// this will return false until channel done is closed
+func clientsfoundit() bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
+}
+
+var network = make(chan struct{}) // messages from the network
+
+// external is from outside - tells us to stop
+func external() {
+	tick := time.Tick(1 * time.Second)
+	for cd := 10; cd > 0; cd-- {
+		if cancelled() {
+			fmt.Printf("network cancelled!\n ")
+			return
+		}
+		if clientsfoundit() {
+			fmt.Printf("network cancelled!\n ")
+			return
+		}
+		<-tick // wait a sec
+	}
+	// we get here - kickoff
+	fmt.Printf("NETWORK CALLING!\n ")
+	network <- struct{}{}
+}
+
 // server doles out work
 func server(work []string) {
 	listen := make(chan int) // where server waits for word of success
@@ -63,21 +93,34 @@ func server(work []string) {
 			client(i, w, listen)
 		}(i, w)
 	}
-	// wait for a response,
-	// TODO or an external timeout
-	theOne := <-listen
-
-	fmt.Printf("server: found by %d\n ", theOne)
-	// stop the rest
-	close(done)
-	// drain the listen channel
-	for i := 0; i < len(work); i++ {
-		fmt.Printf(">>from %d\n", <-listen)
+	// wait for a response or an external timeout
+	select {
+	case theOne := <-listen:
+		fmt.Printf("server: found by %d\n ", theOne)
+		close(done)
+		// drain the listen channel
+		for i := 0; i < len(work); i++ {
+			fmt.Printf(">>from %d\n", <-listen)
+		}
+	case <-network:
+		close(done)
+		// drain the listen channel
+		for i := 0; i < len(work); i++ {
+			fmt.Printf(">>from %d\n", <-listen)
+		}
 	}
-	fmt.Println("server done, bye!")
+	// ... before quitting
+	fmt.Println("server done ... bye!")
 }
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
+	// for {
+	go external()
 	server([]string{"al", "ph", "bet", "ic"})
+	done = make(chan struct{})
+	network = make(chan struct{})
+	go external()
+	server([]string{"al", "ph", "bet", "ic"})
+	// }
 }
