@@ -13,7 +13,7 @@ import (
 	"log"
 )
 
-// Type Task is the set of byte slices that each client receives.
+// Task type is the set of byte slices that each client receives.
 // Ultimately, the blockheader is filled then its double hash compared
 // to target
 type Task struct {
@@ -25,7 +25,7 @@ type Task struct {
 	CoinBase string // equiv of both coinb1, coinb2 (TODO --> []byte)
 }
 
-// Type InComing captures the raw data that the server assembles to create
+// InComing captures the raw data that the server assembles to create
 // work for client miners
 type InComing struct {
 	Version    uint32   // version

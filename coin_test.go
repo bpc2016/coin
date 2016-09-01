@@ -13,8 +13,8 @@ func TestDoubleSHA256(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	hash_str := fmt.Sprintf("%x", hash)
-	if hash_str != expected {
+	hashStr := fmt.Sprintf("%x", hash)
+	if hashStr != expected {
 		t.Errorf("expected %s but got %s", expected, hash)
 	}
 }
