@@ -8,23 +8,22 @@ import (
 	"time"
 )
 
+//============================== clients ==========================================
+
 // dice
 func toss() int {
 	return rand.Intn(6)
 }
 
-// client has n id and  owrks on a load of work
-// needs to communicate with the server
+// client has an id and  works on a load of work - tosses two dice waiting for a double 5
 func client(id int, load string, toServer chan int) {
-	fmt.Printf("howdy, I am %d and have work: %s\n", id, load)
+	fmt.Printf("I am %d and have work: %s\n", id, load)
 	foundit := false
-	// spin wheels
-	tick := time.Tick(1 * time.Second)
-	// decide to win or lose
+	tick := time.Tick(1 * time.Second) // spin wheels
 	for c := 0; c < 40; c++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 {
-			fmt.Printf("** %d *** FOUND it\n", id)
+			fmt.Printf("== %d == FOUND it\n", id)
 			foundit = true
 			break
 		}
@@ -38,7 +37,7 @@ func client(id int, load string, toServer chan int) {
 	if foundit {
 		toServer <- id // declare we are done
 	}
-	fmt.Printf("[%d] .. BYE\n", id)
+	// fmt.Printf("[%d] .. BYE\n", id)
 	toServer <- id
 }
 
@@ -54,73 +53,59 @@ func cancelled() bool {
 	}
 }
 
-// this will return false until channel done is closed
-func clientsfoundit() bool {
-	select {
-	case <-done:
-		return true
-	default:
-		return false
-	}
-}
+//========================= server ===========================================
 
 var network = make(chan struct{}) // messages from the network
 
-// external is from outside - tells us to stop
-func external() {
-	tick := time.Tick(1 * time.Second)
-	for cd := 10; cd > 0; cd-- {
+// external counts down for m seconds then tells us to stop unless we cancel with a find
+func external(m int) {
+	tick := time.Tick(100 * time.Millisecond)
+	for cd := m * 10; cd > 0; cd-- { // effectively 10 second countdown
 		if cancelled() {
-			fmt.Printf("network cancelled!\n ")
-			return
-		}
-		if clientsfoundit() {
-			fmt.Printf("network cancelled!\n ")
+			fmt.Printf("Network cancelled!\n")
 			return
 		}
 		<-tick // wait a sec
 	}
 	// we get here - kickoff
-	fmt.Printf("NETWORK CALLING!\n ")
+	fmt.Printf("NETWORK CALLING!\n")
 	network <- struct{}{}
 }
 
 // server doles out work
 func server(work []string) {
+	go external(8)           // start listening to the network
 	listen := make(chan int) // where server waits for word of success
 	for i, w := range work {
 		go func(i int, w string) {
 			client(i, w, listen)
 		}(i, w)
 	}
-	// wait for a response or an external timeout
+	// wait for a response or an external timeout - block
 	select {
 	case theOne := <-listen:
-		fmt.Printf("server: found by %d\n ", theOne)
+		fmt.Printf("Server: win found by %d\n", theOne)
 		close(done)
 		// drain the listen channel
 		for i := 0; i < len(work); i++ {
-			fmt.Printf(">>from %d\n", <-listen)
+			fmt.Printf("[%d] >>\n", <-listen)
 		}
 	case <-network:
 		close(done)
 		// drain the listen channel
 		for i := 0; i < len(work); i++ {
-			fmt.Printf(">>from %d\n", <-listen)
+			fmt.Printf("(%d) >>\n", <-listen)
 		}
 	}
 	// ... before quitting
-	fmt.Println("server done ... bye!")
+	fmt.Println("Server: ... bye!\n---------------------------")
+	done = make(chan struct{}) // for next call
 }
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	// for {
-	go external()
-	server([]string{"al", "ph", "bet", "ic"})
-	done = make(chan struct{})
-	network = make(chan struct{})
-	go external()
-	server([]string{"al", "ph", "bet", "ic"})
-	// }
+	for {
+		server([]string{"al", "ph", "bet", "ic"})
+		time.Sleep(2 * time.Second)
+	}
 }
