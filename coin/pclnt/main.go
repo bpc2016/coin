@@ -4,10 +4,10 @@ import (
 	"log"
 	"os"
 
-	pb "coin/cpb"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	// pb "google.golang.org/grpc/examples/helloworld/helloworld"
+	pb "coin/cpb"
 )
 
 const (

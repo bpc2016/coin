@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"coin/cpb"
+	pb "coin/cpb"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -24,13 +24,13 @@ var loggedIn = make(map[string]int)
 var nextID = -1 // we want id assigned from 0, see below
 
 // Login implements cpb.CoinServer
-func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
+func (s *server) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginReply, error) {
 	if _, ok := loggedIn[in.Name]; ok {
 		return nil, errors.New("You are already logged in!")
 	}
 	nextID++
 	loggedIn[in.Name] = nextID
-	return &cpb.LoginReply{Id: int32(nextID), Work: "work for " + in.Name}, nil
+	return &pb.LoginReply{Id: int32(nextID), Work: "work for " + in.Name}, nil
 }
 
 func main() {
@@ -39,6 +39,6 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	s := grpc.NewServer()
-	cpb.RegisterCoinServer(s, &server{})
+	pb.RegisterCoinServer(s, &server{})
 	s.Serve(lis)
 }
