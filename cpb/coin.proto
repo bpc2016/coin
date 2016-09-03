@@ -11,9 +11,11 @@ service Coin {
   rpc Login (LoginRequest) returns (LoginReply) {}
   // this is a request to start mining
   rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
+  //
+  rpc Announce (AnnounceRequest) returns (AnnounceReply) {}
 }
 
-// The request message containing the user's name.
+// The Login request message containing the user's name.
 message LoginRequest {
   string name = 1;
 }
@@ -23,17 +25,32 @@ message GetWorkRequest {
   string name = 1;
 }
 
-// The response message containing the assigned id and work
+// Announce request carries the same name as login
+message AnnounceRequest {
+  Win win = 1;
+}
+
+// Login response message containing the assigned id and work
 message LoginReply {
   uint32 id = 1;
 }
 
-// The mining response is boolean
+// GetWork response is a work struct
 message GetWorkReply {
   Work work = 1;
 }
 
+// Announce response is boolean
+message AnnounceReply {
+  bool ok = 1;
+}
+
 message Work {
-  string specific = 1;
-  bytes block = 2;
+  string coinbase = 1;
+  bytes block = 2;  
+}
+
+message Win {
+  string coinbase = 1;
+  uint32 nonce = 2;  
 }

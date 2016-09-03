@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -81,11 +82,25 @@ func pistolFired() bool {
 	}
 }
 
+// Announce implements cpb.CoinServer
+func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
+	checked := verify(soln)
+	return &cpb.AnnounceReply{Ok: checked}, nil
+}
+
 //TODO - move these out of here
 
-// prepares teh candidatee block and also provides user specific data
+// check whether the proposed nonce/coinbase works with current block
+// TODO -this should return err as well
+func verify(soln *cpb.AnnounceRequest) bool {
+	fmt.Printf("received proposed solution: %+v\n", soln)
+	return true
+}
+
+// prepares the candidatee block and also provides user specific coibase data
+// TODO -this should return err as well
 func fetchWork(in *cpb.GetWorkRequest) *cpb.Work {
-	return &cpb.Work{Specific: in.Name, Block: []byte("hello world")}
+	return &cpb.Work{Coinbase: in.Name, Block: []byte("hello world")}
 }
 
 // initalise
