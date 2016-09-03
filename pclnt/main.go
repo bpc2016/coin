@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	pb "coin/cpb"
+	"coin/cpb"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -22,16 +22,27 @@ func main() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	c := pb.NewCoinClient(conn)
+	c := cpb.NewCoinClient(conn)
 
 	// Contact the server and print out its response.
 	name := defaultName
 	if len(os.Args) > 1 {
 		name = os.Args[1]
 	}
-	r, err := c.Login(context.Background(), &pb.LoginRequest{Name: name})
+	r1, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not login: %v", err)
 	}
-	log.Printf("Login successful. id: %d, work: %s", r.Id, r.Work)
+	log.Printf("Login successful. id: %d, work: %s", r1.Id, r1.Work)
+
+	// get ready, get set ... this needs to block
+	r2, err := c.Mine(context.Background(), &cpb.MineRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not login: %v", err)
+	}
+	if r2.Ok {
+		log.Printf("Mine request successful")
+	} else {
+		log.Printf("Mine request FAILED")
+	}
 }

@@ -9,10 +9,17 @@ package cpb;  // coin proto buffer
 service Coin {
   // very first message client -> server requests login details
   rpc Login (LoginRequest) returns (LoginReply) {}
+  // this is a request to start mining
+  rpc Mine (MineRequest) returns (MineReply) {}
 }
 
 // The request message containing the user's name.
 message LoginRequest {
+  string name = 1;
+}
+
+// Mine request carries the same name as login
+message MineRequest {
   string name = 1;
 }
 
@@ -22,3 +29,7 @@ message LoginReply {
   string work = 2;
 }
 
+// The mining response is boolean
+message MineReply {
+  bool ok = 1;
+}
