@@ -33,7 +33,17 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
-	log.Printf("SOlution verified: %+v\n", r.Ok)
+	log.Printf("Solution verified: %+v\n", r.Ok)
+}
+
+// getCancel makes a blocking request to teh server
+func getCancel(c cpb.CoinClient, name string) {
+	r, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not request cancellation: %v", err)
+	}
+	log.Printf("Got cancel message: %+v\n", r.Ok)
+	cancelled = r.Ok
 }
 
 var cancelled bool
@@ -101,6 +111,10 @@ func main() {
 	// TODO - convert the context to have a timeout here
 
 	// search
+	cancelled = false
+
+	fmt.Printf("fetching work %s ..\n", name)
 	task := getWork(c, name)
+	go getCancel(c, name)
 	search(c, r.Id, task)
 }

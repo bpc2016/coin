@@ -52,8 +52,10 @@ var getSet starter
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
+	fmt.Printf("GetWork req: %+v\n", in)
 	getSet.mu.Lock()
 	getSet.linedUp++
+	fmt.Printf("GetWork linedUp = %d\n", getSet.linedUp)
 	if getSet.linedUp == enoughGetWorkrs {
 		close(getSet.waiting)
 		getSet.linedUp = 0
@@ -88,16 +90,49 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	return &cpb.AnnounceReply{Ok: checked}, nil
 }
 
-//TODO - move these out of here
+// GetCancel implements cpb.CoinServer
+func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
+	fmt.Printf("GetCancel request from %s\n", in.Name)
+	for {
+		if wantcancel() {
+			break
+		}
+	}
+	fmt.Printf("GetCancel OUT from %s\n", in.Name)
+	return &cpb.GetCancelReply{Ok: true}, nil
+	// return &cpb.GetCancelReply{Ok: false}, nil
+}
 
 // check whether the proposed nonce/coinbase works with current block
 // TODO -this should return err as well
 func verify(soln *cpb.AnnounceRequest) bool {
 	fmt.Printf("received proposed solution: %+v\n", soln)
+	getEnd.mu.Lock()
+	// check if already closed!!
+	close(getEnd.waiting)
+	getEnd.mu.Unlock()
 	return true
 }
 
-// prepares the candidatee block and also provides user specific coibase data
+type stoper struct {
+	waiting chan struct{}
+	mu      sync.Mutex
+}
+
+var getEnd stoper
+
+func wantcancel() bool {
+	select {
+	case <-getEnd.waiting:
+		return true
+	default:
+		return false
+	}
+}
+
+//TODO - move these out of here
+
+// prepares the candidate block and also provides user specific coibase data
 // TODO -this should return err as well
 func fetchWork(in *cpb.GetWorkRequest) *cpb.Work {
 	return &cpb.Work{Coinbase: in.Name, Block: []byte("hello world")}
@@ -109,6 +144,7 @@ func init() {
 	users.nextID = -1
 
 	getSet.waiting = make(chan struct{})
+	getEnd.waiting = make(chan struct{})
 }
 
 func main() {

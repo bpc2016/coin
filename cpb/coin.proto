@@ -9,10 +9,12 @@ package cpb;  // coin proto buffer
 service Coin {
   // very first message client -> server requests login details
   rpc Login (LoginRequest) returns (LoginReply) {}
-  // this is a request to start mining
+  // GetWork is a request to start mining
   rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
-  //
+  // Announce is a request to accept a win discovery
   rpc Announce (AnnounceRequest) returns (AnnounceReply) {}
+  // GetCancel is a request for a cancellation of search
+  rpc GetCancel (GetCancelRequest) returns (GetCancelReply) {}
 }
 
 // The Login request message containing the user's name.
@@ -30,6 +32,11 @@ message AnnounceRequest {
   Win win = 1;
 }
 
+// GetCancel requests carries the same name as login
+message GetCancelRequest {
+  string name = 1;
+}
+
 // Login response message containing the assigned id and work
 message LoginReply {
   uint32 id = 1;
@@ -42,6 +49,11 @@ message GetWorkReply {
 
 // Announce response is boolean
 message AnnounceReply {
+  bool ok = 1;
+}
+
+// GetCancel response is boolean
+message GetCancelReply {
   bool ok = 1;
 }
 
