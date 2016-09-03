@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"sync"
 
 	"coin/cpb"
 
@@ -13,25 +14,37 @@ import (
 
 const (
 	port         = ":50051"
-	enoughMiners = 2
+	enoughMiners = 3
 )
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
 
-// loggedIn keeps track of logins, prevents duplicates
-var loggedIn = make(map[string]int)
+// logger type is for the users var  accounts for logins
+type logger struct {
+	nextID   int
+	mu       sync.Mutex
+	loggedIn map[string]int
+}
 
-var nextID = -1 // we want id assigned from 0, see below
+var users logger
+
+// initalise
+func init() {
+	users.loggedIn = make(map[string]int)
+	users.nextID = -1
+}
 
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
-	if _, ok := loggedIn[in.Name]; ok {
+	users.mu.Lock()
+	if _, ok := users.loggedIn[in.Name]; ok {
 		return nil, errors.New("You are already logged in!")
 	}
-	nextID++
-	loggedIn[in.Name] = nextID
-	return &cpb.LoginReply{Id: int32(nextID), Work: "work for " + in.Name}, nil
+	users.nextID++
+	users.loggedIn[in.Name] = users.nextID
+	users.mu.Unlock()
+	return &cpb.LoginReply{Id: int32(users.nextID), Work: "work for " + in.Name}, nil
 }
 
 var linedUp int
