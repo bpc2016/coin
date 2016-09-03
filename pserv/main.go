@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -55,7 +54,6 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	getSet.mu.Lock()
 	getSet.linedUp++
 	if getSet.linedUp == enoughGetWorkrs {
-		fmt.Printf("lined up %d\n", getSet.linedUp)
 		close(getSet.waiting)
 		getSet.linedUp = 0
 	}
