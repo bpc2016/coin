@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -13,8 +14,8 @@ import (
 )
 
 const (
-	port         = ":50051"
-	enoughMiners = 3
+	port            = ":50051"
+	enoughGetWorkrs = 3
 )
 
 // server is used to implement cpb.CoinServer.
@@ -29,12 +30,6 @@ type logger struct {
 
 var users logger
 
-// initalise
-func init() {
-	users.loggedIn = make(map[string]int)
-	users.nextID = -1
-}
-
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
 	users.mu.Lock()
@@ -44,34 +39,63 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	users.nextID++
 	users.loggedIn[in.Name] = users.nextID
 	users.mu.Unlock()
-	return &cpb.LoginReply{Id: int32(users.nextID), Work: "work for " + in.Name}, nil
+	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var linedUp int
-var waiting = make(chan struct{})
+type starter struct {
+	linedUp int
+	waiting chan struct{}
+	mu      sync.Mutex
+}
 
-// Mine implements cpb.CoinServer, synchronise start of miners
-func (s *server) Mine(ctx context.Context, in *cpb.MineRequest) (*cpb.MineReply, error) {
-	linedUp++
-	if linedUp == enoughMiners {
-		close(waiting)
+var getSet starter
+
+// GetWork implements cpb.CoinServer, synchronise start of miners
+func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
+	getSet.mu.Lock()
+	getSet.linedUp++
+	if getSet.linedUp == enoughGetWorkrs {
+		fmt.Printf("lined up %d\n", getSet.linedUp)
+		close(getSet.waiting)
+		getSet.linedUp = 0
 	}
-	for {
+	getSet.mu.Unlock()
+
+	work := fetchWork(in) // get this in advance
+	for {                 // wait
 		if pistolFired() {
 			break
 		}
 	}
-	return &cpb.MineReply{Ok: true}, nil
+	if getSet.linedUp == 0 { // we have just closed
+		getSet.waiting = make(chan struct{})
+	}
+	return &cpb.GetWorkReply{Work: work}, nil
 }
 
 // pistolFired  returns false until channel waiting is closed.
 func pistolFired() bool {
 	select {
-	case <-waiting:
+	case <-getSet.waiting:
 		return true
 	default:
 		return false
 	}
+}
+
+//TODO - move these out of here
+
+// prepares teh candidatee block and also provides user specific data
+func fetchWork(in *cpb.GetWorkRequest) *cpb.Work {
+	return &cpb.Work{Specific: in.Name, Block: []byte("hello world")}
+}
+
+// initalise
+func init() {
+	users.loggedIn = make(map[string]int)
+	users.nextID = -1
+
+	getSet.waiting = make(chan struct{})
 }
 
 func main() {

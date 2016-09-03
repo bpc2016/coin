@@ -10,7 +10,7 @@ service Coin {
   // very first message client -> server requests login details
   rpc Login (LoginRequest) returns (LoginReply) {}
   // this is a request to start mining
-  rpc Mine (MineRequest) returns (MineReply) {}
+  rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
 }
 
 // The request message containing the user's name.
@@ -18,18 +18,22 @@ message LoginRequest {
   string name = 1;
 }
 
-// Mine request carries the same name as login
-message MineRequest {
+// GetWork request carries the same name as login
+message GetWorkRequest {
   string name = 1;
 }
 
 // The response message containing the assigned id and work
 message LoginReply {
-  int32 id = 1;
-  string work = 2;
+  uint32 id = 1;
 }
 
 // The mining response is boolean
-message MineReply {
-  bool ok = 1;
+message GetWorkReply {
+  Work work = 1;
+}
+
+message Work {
+  string specific = 1;
+  bytes block = 2;
 }

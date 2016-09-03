@@ -33,16 +33,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not login: %v", err)
 	}
-	log.Printf("Login successful. id: %d, work: %s", r1.Id, r1.Work)
+	log.Printf("Login successful. Assigned id: %d\n", r1.Id)
+
+	// TODO - convert the context to have a timeout here
 
 	// get ready, get set ... this needs to block
-	r2, err := c.Mine(context.Background(), &cpb.MineRequest{Name: name})
+	r2, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not login: %v", err)
 	}
-	if r2.Ok {
-		log.Printf("Mine request successful")
-	} else {
-		log.Printf("Mine request FAILED")
-	}
+	log.Printf("Got work %+v\n", r2.Work)
 }

@@ -10,9 +10,10 @@ It is generated from these files:
 
 It has these top-level messages:
 	LoginRequest
-	MineRequest
+	GetWorkRequest
 	LoginReply
-	MineReply
+	GetWorkReply
+	Work
 */
 package cpb
 
@@ -46,20 +47,19 @@ func (m *LoginRequest) String() string            { return proto.CompactTextStri
 func (*LoginRequest) ProtoMessage()               {}
 func (*LoginRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
-// Mine request carries the same name as login
-type MineRequest struct {
+// GetWork request carries the same name as login
+type GetWorkRequest struct {
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
 }
 
-func (m *MineRequest) Reset()                    { *m = MineRequest{} }
-func (m *MineRequest) String() string            { return proto.CompactTextString(m) }
-func (*MineRequest) ProtoMessage()               {}
-func (*MineRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (m *GetWorkRequest) Reset()                    { *m = GetWorkRequest{} }
+func (m *GetWorkRequest) String() string            { return proto.CompactTextString(m) }
+func (*GetWorkRequest) ProtoMessage()               {}
+func (*GetWorkRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
 
 // The response message containing the assigned id and work
 type LoginReply struct {
-	Id   int32  `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
-	Work string `protobuf:"bytes,2,opt,name=work" json:"work,omitempty"`
+	Id uint32 `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
 }
 
 func (m *LoginReply) Reset()                    { *m = LoginReply{} }
@@ -68,20 +68,38 @@ func (*LoginReply) ProtoMessage()               {}
 func (*LoginReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
 
 // The mining response is boolean
-type MineReply struct {
-	Ok bool `protobuf:"varint,1,opt,name=ok" json:"ok,omitempty"`
+type GetWorkReply struct {
+	Work *Work `protobuf:"bytes,1,opt,name=work" json:"work,omitempty"`
 }
 
-func (m *MineReply) Reset()                    { *m = MineReply{} }
-func (m *MineReply) String() string            { return proto.CompactTextString(m) }
-func (*MineReply) ProtoMessage()               {}
-func (*MineReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+func (m *GetWorkReply) Reset()                    { *m = GetWorkReply{} }
+func (m *GetWorkReply) String() string            { return proto.CompactTextString(m) }
+func (*GetWorkReply) ProtoMessage()               {}
+func (*GetWorkReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+
+func (m *GetWorkReply) GetWork() *Work {
+	if m != nil {
+		return m.Work
+	}
+	return nil
+}
+
+type Work struct {
+	Specific string `protobuf:"bytes,1,opt,name=specific" json:"specific,omitempty"`
+	Block    []byte `protobuf:"bytes,2,opt,name=block,proto3" json:"block,omitempty"`
+}
+
+func (m *Work) Reset()                    { *m = Work{} }
+func (m *Work) String() string            { return proto.CompactTextString(m) }
+func (*Work) ProtoMessage()               {}
+func (*Work) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
 
 func init() {
 	proto.RegisterType((*LoginRequest)(nil), "cpb.LoginRequest")
-	proto.RegisterType((*MineRequest)(nil), "cpb.MineRequest")
+	proto.RegisterType((*GetWorkRequest)(nil), "cpb.GetWorkRequest")
 	proto.RegisterType((*LoginReply)(nil), "cpb.LoginReply")
-	proto.RegisterType((*MineReply)(nil), "cpb.MineReply")
+	proto.RegisterType((*GetWorkReply)(nil), "cpb.GetWorkReply")
+	proto.RegisterType((*Work)(nil), "cpb.Work")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -98,7 +116,7 @@ type CoinClient interface {
 	// very first message client -> server requests login details
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginReply, error)
 	// this is a request to start mining
-	Mine(ctx context.Context, in *MineRequest, opts ...grpc.CallOption) (*MineReply, error)
+	GetWork(ctx context.Context, in *GetWorkRequest, opts ...grpc.CallOption) (*GetWorkReply, error)
 }
 
 type coinClient struct {
@@ -118,9 +136,9 @@ func (c *coinClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.C
 	return out, nil
 }
 
-func (c *coinClient) Mine(ctx context.Context, in *MineRequest, opts ...grpc.CallOption) (*MineReply, error) {
-	out := new(MineReply)
-	err := grpc.Invoke(ctx, "/cpb.Coin/Mine", in, out, c.cc, opts...)
+func (c *coinClient) GetWork(ctx context.Context, in *GetWorkRequest, opts ...grpc.CallOption) (*GetWorkReply, error) {
+	out := new(GetWorkReply)
+	err := grpc.Invoke(ctx, "/cpb.Coin/GetWork", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +151,7 @@ type CoinServer interface {
 	// very first message client -> server requests login details
 	Login(context.Context, *LoginRequest) (*LoginReply, error)
 	// this is a request to start mining
-	Mine(context.Context, *MineRequest) (*MineReply, error)
+	GetWork(context.Context, *GetWorkRequest) (*GetWorkReply, error)
 }
 
 func RegisterCoinServer(s *grpc.Server, srv CoinServer) {
@@ -158,20 +176,20 @@ func _Coin_Login_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Coin_Mine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MineRequest)
+func _Coin_GetWork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CoinServer).Mine(ctx, in)
+		return srv.(CoinServer).GetWork(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/cpb.Coin/Mine",
+		FullMethod: "/cpb.Coin/GetWork",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoinServer).Mine(ctx, req.(*MineRequest))
+		return srv.(CoinServer).GetWork(ctx, req.(*GetWorkRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -185,8 +203,8 @@ var _Coin_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Coin_Login_Handler,
 		},
 		{
-			MethodName: "Mine",
-			Handler:    _Coin_Mine_Handler,
+			MethodName: "GetWork",
+			Handler:    _Coin_GetWork_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -196,17 +214,20 @@ var _Coin_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("coin.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 190 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xe2, 0xe2, 0x4a, 0xce, 0xcf, 0xcc,
-	0xd3, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x4e, 0x2e, 0x48, 0x52, 0x52, 0xe2, 0xe2, 0xf1,
-	0xc9, 0x4f, 0xcf, 0xcc, 0x0b, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x12, 0xe2, 0x62, 0xc9,
-	0x4b, 0xcc, 0x4d, 0x95, 0x60, 0x54, 0x60, 0xd4, 0xe0, 0x0c, 0x02, 0xb3, 0x95, 0x14, 0xb9, 0xb8,
-	0x7d, 0x33, 0xf3, 0x52, 0xf1, 0x29, 0x31, 0xe0, 0xe2, 0x82, 0x1a, 0x53, 0x90, 0x53, 0x29, 0xc4,
-	0xc7, 0xc5, 0x94, 0x99, 0x02, 0x96, 0x67, 0x0d, 0x62, 0xca, 0x4c, 0x01, 0xe9, 0x28, 0xcf, 0x2f,
-	0xca, 0x96, 0x60, 0x82, 0xe8, 0x00, 0xb1, 0x95, 0xa4, 0xb9, 0x38, 0x21, 0x86, 0x42, 0x35, 0xe4,
-	0x67, 0x83, 0x35, 0x70, 0x04, 0x31, 0xe5, 0x67, 0x1b, 0x25, 0x72, 0xb1, 0x38, 0xe7, 0x67, 0xe6,
-	0x09, 0xe9, 0x72, 0xb1, 0x82, 0x8d, 0x15, 0x12, 0xd4, 0x4b, 0x2e, 0x48, 0xd2, 0x43, 0x76, 0xa9,
-	0x14, 0x3f, 0xb2, 0x50, 0x41, 0x4e, 0xa5, 0x12, 0x83, 0x90, 0x16, 0x17, 0x0b, 0xc8, 0x4c, 0x21,
-	0x01, 0xb0, 0x14, 0x92, 0x9b, 0xa5, 0xf8, 0x90, 0x44, 0xc0, 0x6a, 0x93, 0xd8, 0xc0, 0x81, 0x60,
-	0x0c, 0x08, 0x00, 0x00, 0xff, 0xff, 0xf2, 0x84, 0x10, 0x5b, 0x12, 0x01, 0x00, 0x00,
+	// 228 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x7c, 0x90, 0x31, 0x4f, 0xc3, 0x30,
+	0x10, 0x85, 0x49, 0x70, 0x81, 0x3e, 0x42, 0x51, 0x0f, 0x86, 0x2a, 0x02, 0xa9, 0xb2, 0x18, 0xba,
+	0x34, 0x43, 0xbb, 0xb0, 0x33, 0xb0, 0x30, 0x79, 0x61, 0xc6, 0xae, 0x41, 0x26, 0xc1, 0x67, 0xd2,
+	0x20, 0xd4, 0x7f, 0x8f, 0x7a, 0x44, 0x55, 0xbb, 0x74, 0xf3, 0x7b, 0xdf, 0xf9, 0xf9, 0x9e, 0x01,
+	0xc7, 0x21, 0x56, 0xa9, 0xe5, 0x8e, 0xe9, 0xd4, 0x25, 0xab, 0x35, 0x8a, 0x17, 0xfe, 0x08, 0xd1,
+	0xf8, 0xef, 0x1f, 0xbf, 0xee, 0x88, 0xa0, 0xe2, 0xdb, 0x97, 0x9f, 0x64, 0xd3, 0x6c, 0x36, 0x34,
+	0x72, 0xd6, 0x0f, 0x18, 0x3d, 0xfb, 0xee, 0x95, 0xdb, 0xfa, 0xd8, 0xd4, 0x1d, 0xd0, 0x27, 0xa5,
+	0x66, 0x43, 0x23, 0xe4, 0x61, 0x25, 0xfc, 0xca, 0xe4, 0x61, 0xa5, 0xe7, 0x28, 0x76, 0x19, 0x5b,
+	0x7e, 0x0f, 0xf5, 0xcb, 0x6d, 0x2d, 0x13, 0x97, 0x8b, 0x61, 0xe5, 0x92, 0xad, 0x84, 0x8a, 0xad,
+	0x1f, 0xa1, 0xb6, 0x8a, 0x4a, 0x5c, 0xac, 0x93, 0x77, 0xe1, 0x3d, 0xb8, 0xfe, 0xb1, 0x9d, 0xa6,
+	0x5b, 0x0c, 0x6c, 0xc3, 0xae, 0x9e, 0xe4, 0xd3, 0x6c, 0x56, 0x98, 0x7f, 0xb1, 0xf8, 0x84, 0x7a,
+	0xe2, 0x10, 0x69, 0x8e, 0x81, 0xac, 0x43, 0x63, 0xc9, 0xde, 0x2f, 0x59, 0x5e, 0xef, 0x5b, 0xa9,
+	0xd9, 0xe8, 0x13, 0x5a, 0xe2, 0xbc, 0xdf, 0x8f, 0x6e, 0x84, 0x1e, 0x36, 0x2e, 0xc7, 0x87, 0xa6,
+	0x5c, 0xb2, 0x67, 0xf2, 0x91, 0xcb, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe7, 0x88, 0xe8, 0x88,
+	0x56, 0x01, 0x00, 0x00,
 }
