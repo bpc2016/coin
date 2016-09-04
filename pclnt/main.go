@@ -24,12 +24,16 @@ func getWork(c cpb.CoinClient, name string) {
 	if err != nil {
 		log.Fatalf("could not get work: %v", err)
 	}
-	go getCancel(c, context.Background(), name)
 	log.Printf("Got work %+v\n", r.Work)
+	go getCancel(c, context.Background(), name)
+	// search blocks
 	search(c, r.Work)
-	<-wait
+	<-waitForCancel
+	// then reset it
+	waitForCancel = make(chan struct{})
 }
 
+// annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: toWin(nonce, coinbase)})
 	if err != nil {
@@ -38,16 +42,16 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	log.Printf("Solution verified: %+v\n", r.Ok)
 }
 
-var wait chan struct{}
+var waitForCancel chan struct{}
 
-func gotcancel() bool {
-	select {
-	case <-wait:
-		return true
-	default:
-		return false
-	}
-}
+// func gotcancel() bool {
+// 	select {
+// 	case <-waitForCancel:
+// 		return true
+// 	default:
+// 		return false
+// 	}
+// }
 
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, ctx context.Context, name string) { //tODO make use of ctx.Done()
@@ -56,7 +60,7 @@ func getCancel(c cpb.CoinClient, ctx context.Context, name string) { //tODO make
 		log.Fatalf("could not request cancellation: %v", err)
 	}
 	log.Printf("Got cancel message: %+v\n", r.Ok)
-	close(wait) // assume that we got an ok=true
+	close(waitForCancel) // assume that we got an ok=true
 }
 
 // search tosses two dice waiting for a double 5
@@ -72,13 +76,18 @@ func search(c cpb.CoinClient, work *cpb.Work) {
 		<-tick
 		fmt.Println(myID, " ", cn)
 		// check for a stop order
-		if gotcancel() {
+		select {
+		case <-waitForCancel:
 			break
+		default: // keep going
 		}
+		// if gotcancel() {
+		// 	break
+		// }
 	}
 	if foundit > 0 {
 		fmt.Printf("== %d == FOUND it\n", myID)
-		//close(wait)
+		//close(waitForCancel)
 		annouceWin(c, foundit, work.Coinbase)
 	}
 	fmt.Printf("[%d] .. BYE\n", myID)
@@ -98,7 +107,7 @@ func toWin(nonce uint32, coinbase string) *cpb.Win {
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	wait = make(chan struct{})
+	waitForCancel = make(chan struct{})
 }
 
 var myID uint32
@@ -133,7 +142,6 @@ func main() {
 	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
 
 	for k := 0; ; k++ {
-		wait = make(chan struct{})
 		fmt.Printf("fetching work %s ..\n", name)
 		getWork(c, name)
 		fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
