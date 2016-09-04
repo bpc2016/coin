@@ -23,8 +23,8 @@ type server struct{}
 
 // logger type is for the users var  accounts for logins
 type logger struct {
+	mu       sync.Mutex //TODO make what follows a struct too?
 	nextID   int
-	mu       sync.Mutex
 	loggedIn map[string]int
 }
 
@@ -42,10 +42,16 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-type starter struct {
+type starts struct {
 	linedUp int
 	waiting chan struct{}
-	mu      sync.Mutex
+}
+
+type starter struct {
+	mu sync.Mutex
+	in starts
+	// linedUp int
+	// waiting chan struct{}
 }
 
 var getSet starter
@@ -54,11 +60,16 @@ var getSet starter
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("GetWork req: %+v\n", in)
 	getSet.mu.Lock()
-	getSet.linedUp++
-	fmt.Printf("GetWork linedUp = %d\n", getSet.linedUp)
-	if getSet.linedUp == enoughGetWorkrs {
-		close(getSet.waiting)
-		getSet.linedUp = 0
+	if getSet.in.linedUp == 0 {
+		getEnd.mu.Lock()
+		getEnd.waiting = make(chan struct{})
+		getEnd.mu.Unlock()
+	}
+	getSet.in.linedUp++
+	fmt.Printf("GetWork linedUp = %d\n", getSet.in.linedUp)
+	if getSet.in.linedUp == enoughGetWorkrs {
+		close(getSet.in.waiting)
+		getSet.in.linedUp = 0
 	}
 	getSet.mu.Unlock()
 
@@ -68,8 +79,10 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 			break
 		}
 	}
-	if getSet.linedUp == 0 { // we have just closed
-		getSet.waiting = make(chan struct{})
+	if getSet.in.linedUp == 0 { // we have just closed
+		getSet.mu.Lock()
+		getSet.in.waiting = make(chan struct{})
+		getSet.mu.Unlock()
 	}
 	return &cpb.GetWorkReply{Work: work}, nil
 }
@@ -77,7 +90,7 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 // pistolFired  returns false until channel waiting is closed.
 func pistolFired() bool {
 	select {
-	case <-getSet.waiting:
+	case <-getSet.in.waiting:
 		return true
 	default:
 		return false
@@ -92,15 +105,14 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 
 // GetCancel implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	fmt.Printf("GetCancel request from %s\n", in.Name)
+	// fmt.Printf("GetCancel request from %s\n", in.Name)
 	for {
 		if wantcancel() {
 			break
 		}
 	}
-	fmt.Printf("GetCancel OUT from %s\n", in.Name)
+	fmt.Printf("GetCancel OUT: %s\n", in.Name)
 	return &cpb.GetCancelReply{Ok: true}, nil
-	// return &cpb.GetCancelReply{Ok: false}, nil
 }
 
 // check whether the proposed nonce/coinbase works with current block
@@ -108,15 +120,14 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 func verify(soln *cpb.AnnounceRequest) bool {
 	fmt.Printf("received proposed solution: %+v\n", soln)
 	getEnd.mu.Lock()
-	// check if already closed!!
 	close(getEnd.waiting)
 	getEnd.mu.Unlock()
 	return true
 }
 
 type stoper struct {
-	waiting chan struct{}
 	mu      sync.Mutex
+	waiting chan struct{}
 }
 
 var getEnd stoper
@@ -143,8 +154,7 @@ func init() {
 	users.loggedIn = make(map[string]int)
 	users.nextID = -1
 
-	getSet.waiting = make(chan struct{})
-	getEnd.waiting = make(chan struct{})
+	getSet.in.waiting = make(chan struct{})
 }
 
 func main() {

@@ -20,12 +20,12 @@ const (
 
 func getWork(c cpb.CoinClient, name string) *cpb.Work {
 	// get ready, get set ... this needs to block
-	r2, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not get work: %v", err)
 	}
-	log.Printf("Got work %+v\n", r2.Work)
-	return r2.Work
+	log.Printf("Got work %+v\n", r.Work)
+	return r.Work
 }
 
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
@@ -36,23 +36,33 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	log.Printf("Solution verified: %+v\n", r.Ok)
 }
 
-// getCancel makes a blocking request to teh server
+var wait chan struct{}
+
+func gotcancel() bool {
+	select {
+	case <-wait:
+		return true
+	default:
+		return false
+	}
+}
+
+// getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string) {
 	r, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
 	log.Printf("Got cancel message: %+v\n", r.Ok)
-	cancelled = r.Ok
+	//cancelled = r.Ok
+	close(wait) // assume that we got an ok=true
 }
-
-var cancelled bool
 
 // search tosses two dice waiting for a double 5
 func search(c cpb.CoinClient, id uint32, work *cpb.Work) {
 	var foundit uint32
 	tick := time.Tick(1 * time.Second) // spin wheels
-	for cn := 0; cn < 40; cn++ {
+	for cn := 0; cn < 50; cn++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 {
 			foundit = uint32(cn) // our nonce
@@ -61,7 +71,7 @@ func search(c cpb.CoinClient, id uint32, work *cpb.Work) {
 		<-tick
 		fmt.Println(id, " ", cn)
 		// check for a stop order
-		if cancelled {
+		if gotcancel() {
 			break
 		}
 	}
@@ -86,6 +96,7 @@ func toWin(nonce uint32, coinbase string) *cpb.Win {
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
+	wait = make(chan struct{})
 }
 
 func main() {
@@ -111,10 +122,31 @@ func main() {
 	// TODO - convert the context to have a timeout here
 
 	// search
-	cancelled = false
 
 	fmt.Printf("fetching work %s ..\n", name)
 	task := getWork(c, name)
 	go getCancel(c, name)
 	search(c, r.Id, task)
+	// final wait
+	for {
+		if gotcancel() {
+			break
+		}
+	}
+	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
+
+	for k := 0; k < 5; k++ {
+		wait = make(chan struct{})
+		fmt.Printf("fetching work %s ..\n", name)
+		task = getWork(c, name)
+		go getCancel(c, name)
+		search(c, r.Id, task)
+		// final wait
+		for {
+			if gotcancel() {
+				break
+			}
+		}
+		fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
+	}
 }
