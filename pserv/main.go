@@ -50,8 +50,6 @@ type starts struct {
 type starter struct {
 	mu sync.Mutex
 	in starts
-	// linedUp int
-	// waiting chan struct{}
 }
 
 var getSet starter
@@ -61,6 +59,7 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	fmt.Printf("GetWork req: %+v\n", in)
 	getSet.mu.Lock()
 	if getSet.in.linedUp == 0 {
+		fmt.Printf("GetWork lined=0, resetting getEnd.waiting ...\n")
 		getEnd.mu.Lock()
 		getEnd.waiting = make(chan struct{})
 		getEnd.mu.Unlock()
@@ -74,27 +73,14 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	getSet.mu.Unlock()
 
 	work := fetchWork(in) // get this in advance
-	for {                 // wait
-		if pistolFired() {
-			break
-		}
-	}
+	<-getSet.in.waiting   // wait
+
 	if getSet.in.linedUp == 0 { // we have just closed
 		getSet.mu.Lock()
 		getSet.in.waiting = make(chan struct{})
 		getSet.mu.Unlock()
 	}
 	return &cpb.GetWorkReply{Work: work}, nil
-}
-
-// pistolFired  returns false until channel waiting is closed.
-func pistolFired() bool {
-	select {
-	case <-getSet.in.waiting:
-		return true
-	default:
-		return false
-	}
 }
 
 // Announce implements cpb.CoinServer
@@ -105,12 +91,10 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 
 // GetCancel implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	// fmt.Printf("GetCancel request from %s\n", in.Name)
-	for {
-		if wantcancel() {
-			break
-		}
-	}
+	fmt.Printf("GetCancel request from %s\n", in.Name)
+
+	<-getEnd.waiting // wait
+
 	fmt.Printf("GetCancel OUT: %s\n", in.Name)
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
@@ -118,11 +102,17 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 // check whether the proposed nonce/coinbase works with current block
 // TODO -this should return err as well
 func verify(soln *cpb.AnnounceRequest) bool {
-	fmt.Printf("received proposed solution: %+v\n", soln)
-	getEnd.mu.Lock()
-	close(getEnd.waiting)
-	getEnd.mu.Unlock()
-	return true
+	select {
+	case <-getEnd.waiting:
+		fmt.Printf("LATE proposed solution: %+v\n", soln)
+		return true
+	default:
+		fmt.Printf("received proposed solution: %+v\n", soln)
+		getEnd.mu.Lock()
+		close(getEnd.waiting)
+		getEnd.mu.Unlock()
+		return true
+	}
 }
 
 type stoper struct {
@@ -131,15 +121,6 @@ type stoper struct {
 }
 
 var getEnd stoper
-
-func wantcancel() bool {
-	select {
-	case <-getEnd.waiting:
-		return true
-	default:
-		return false
-	}
-}
 
 //TODO - move these out of here
 
