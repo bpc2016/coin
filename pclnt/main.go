@@ -18,19 +18,16 @@ const (
 	defaultName = "busiso"
 )
 
-func getWork(c cpb.CoinClient, name string) { //*cpb.Work {
-	// ctx, cancel := context.WithCancel(context.Background())
-	// defer cancel()
-	ctx := context.Background()
+func getWork(c cpb.CoinClient, name string) {
 	// get ready, get set ... this needs to block
-	r, err := c.GetWork(ctx, &cpb.GetWorkRequest{Name: name})
+	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not get work: %v", err)
 	}
-	// start the cancel request
-	go getCancel(c, ctx, name) // TODO pass this a ctx object w/ a 'cancel'
+	go getCancel(c, context.Background(), name)
 	log.Printf("Got work %+v\n", r.Work)
 	search(c, r.Work)
+	<-wait
 }
 
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
@@ -66,7 +63,7 @@ func getCancel(c cpb.CoinClient, ctx context.Context, name string) { //tODO make
 func search(c cpb.CoinClient, work *cpb.Work) {
 	var foundit uint32
 	tick := time.Tick(1 * time.Second) // spin wheels
-	for cn := 0; cn < 50; cn++ {
+	for cn := 0; cn < 100; cn++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 {
 			foundit = uint32(cn) // our nonce
@@ -81,6 +78,7 @@ func search(c cpb.CoinClient, work *cpb.Work) {
 	}
 	if foundit > 0 {
 		fmt.Printf("== %d == FOUND it\n", myID)
+		//close(wait)
 		annouceWin(c, foundit, work.Coinbase)
 	}
 	fmt.Printf("[%d] .. BYE\n", myID)
@@ -132,24 +130,12 @@ func main() {
 
 	fmt.Printf("fetching work %s ..\n", name)
 	getWork(c, name)
-	// final wait
-	for {
-		if gotcancel() {
-			break
-		}
-	}
 	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
 
-	for k := 0; k < 5; k++ {
+	for k := 0; ; k++ {
 		wait = make(chan struct{})
 		fmt.Printf("fetching work %s ..\n", name)
 		getWork(c, name)
-		// final wait
-		for {
-			if gotcancel() {
-				break
-			}
-		}
 		fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
 	}
 }

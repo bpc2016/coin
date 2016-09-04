@@ -102,17 +102,21 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 // check whether the proposed nonce/coinbase works with current block
 // TODO -this should return err as well
 func verify(soln *cpb.AnnounceRequest) bool {
+	// select {
+	// case <-getEnd.waiting:
+	// 	fmt.Printf("LATE proposed solution: %+v\n", soln)
+	// 	return true
+	// default:
+	fmt.Printf("received proposed solution: %+v\n", soln)
+	getEnd.mu.Lock()
 	select {
-	case <-getEnd.waiting:
-		fmt.Printf("LATE proposed solution: %+v\n", soln)
-		return true
+	case <-getEnd.waiting: // already closed
 	default:
-		fmt.Printf("received proposed solution: %+v\n", soln)
-		getEnd.mu.Lock()
 		close(getEnd.waiting)
-		getEnd.mu.Unlock()
-		return true
 	}
+	getEnd.mu.Unlock()
+	return true
+	// }
 }
 
 type stoper struct {
