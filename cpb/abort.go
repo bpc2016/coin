@@ -33,12 +33,14 @@ func (ab *Abort) isClosed() bool {
 }
 
 // Cancel safely closes our channel
-func (ab *Abort) Cancel() {
+func (ab *Abort) Cancel() bool {
 	ab.Lock()
+	defer ab.Unlock()
 	if !ab.isClosed() {
 		close(ab.ch)
+		return false
 	}
-	ab.Unlock()
+	return true
 }
 
 // Revive regenerates our channel
