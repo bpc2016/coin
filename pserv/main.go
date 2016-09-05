@@ -1,137 +1,164 @@
 package main
 
 import (
+	"coin/cpb"
 	"errors"
 	"fmt"
 	"log"
 	"net"
 	"sync"
-
-	"coin/cpb"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
 const (
-	port            = ":50051"
-	enoughGetWorkrs = 3
+	port          = ":50051"
+	enoughWorkers = 3
 )
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
 
-// logger type is for the users var  accounts for logins
+// logger type is for the users login details
 type logger struct {
-	mu       sync.Mutex //TODO make what follows a struct too?
-	nextID   int
-	loggedIn map[string]int
+	sync.Mutex //anonymous
+	nextID     int
+	loggedIn   map[string]int
 }
 
 var users logger
 
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
-	users.mu.Lock()
+	users.Lock()
+	defer users.Unlock()
 	if _, ok := users.loggedIn[in.Name]; ok {
 		return nil, errors.New("You are already logged in!")
 	}
 	users.nextID++
 	users.loggedIn[in.Name] = users.nextID
-	users.mu.Unlock()
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
+/*
+// these structs control starting clients on the search
 type starts struct {
-	linedUp int
-	waiting chan struct{}
+	numMiners int
+	theLine   chan struct{}
 }
 
 type starter struct {
 	mu sync.Mutex
-	in starts
+	on starts
 }
 
 var getSet starter
+*/
+
+type abort struct {
+	sync.Mutex
+	numMiners int
+	theLine   chan struct{}
+}
+
+var getwork abort
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("GetWork req: %+v\n", in)
-	getSet.mu.Lock()
-	if getSet.in.linedUp == 0 {
-		fmt.Printf("GetWork lined=0, resetting getEnd.waiting ...\n")
-		getEnd.mu.Lock()
-		getEnd.waiting = make(chan struct{})
-		getEnd.mu.Unlock()
-	}
-	getSet.in.linedUp++
-	fmt.Printf("GetWork linedUp = %d\n", getSet.in.linedUp)
-	if getSet.in.linedUp == enoughGetWorkrs {
-		close(getSet.in.waiting)
-		getSet.in.linedUp = 0
-	}
-	getSet.mu.Unlock()
+	// getSet.mu.Lock()
+	// if getSet.on.numMiners == 0 {
+	// getwork.Lock()
+	// if getwork.numMiners == 0 {
+	// 	endrun.New()
+	// }
+	// getwork.numMiners++
+	// getSet.on.numMiners++ // we simply count miners to signal search start
+	// if getSet.on.numMiners == enoughWorkers {
+	// if getwork.numMiners == enoughWorkers {
+	// close(getSet.on.theLine)
+	// close(getwork.theLine)
+	// go getNewBlocks() // models watching the entire network, timeout our search
+	// getwork.numMiners = 0
+	// getSet.on.numMiners = 0
+	// }
+	// getwork.Unlock()
+	// getSet.mu.Unlock()
+	gate <- in.Name // register
+	//<-getSet.on.theLine // all must wait
+	<-getwork.theLine // all must wait
 
-	work := fetchWork(in) // get this in advance
-	<-getSet.in.waiting   // wait
-
-	if getSet.in.linedUp == 0 { // we have just closed
-		getSet.mu.Lock()
-		getSet.in.waiting = make(chan struct{})
-		getSet.mu.Unlock()
-	}
+	// if getSet.on.numMiners == 0 { // we have just closed
+	// if getwork.numMiners == 0 { // we have just closed
+	// 	getwork.Lock()
+	// 	getwork.theLine = make(chan struct{})
+	// 	getwork.Unlock()
+	// 	// getSet.mu.Lock()
+	// 	// getSet.on.theLine = make(chan struct{})
+	// 	// getSet.mu.Unlock()
+	// }
+	work := fetchWork(in) // work assigned this miner
 	return &cpb.GetWorkReply{Work: work}, nil
 }
 
-// Announce implements cpb.CoinServer
+var gate chan string // unbuffered
+
+func handleGate() {
+	for {
+		gate = make(chan string)
+		fmt.Println("Gate ready ...")
+		for i := 0; i < enoughWorkers; i++ {
+			fmt.Printf("(%d) registered %s\n", i, <-gate)
+		}
+		close(getwork.theLine)
+		go getNewBlocks() // models watching the entire network, timeout our search
+		getwork.theLine = make(chan struct{})
+		endrun.Revive()
+	}
+}
+
+// prepares the candidate block and also provides user specific coibase data
+func fetchWork(in *cpb.GetWorkRequest) *cpb.Work { // TODO -this should return err as well
+	return &cpb.Work{Coinbase: in.Name, Block: []byte("hello world")}
+}
+
+// Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	checked := verify(soln)
+	newblock.Cancel() // cancel previous getNewBlocks
+	checked := true   // TODO - accommodate possible mistaken solution
+	fmt.Printf("We won!: %+v\n", soln)
+	endRun()
 	return &cpb.AnnounceReply{Ok: checked}, nil
 }
 
-// GetCancel implements cpb.CoinServer
+// GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	fmt.Printf("GetCancel request from %s\n", in.Name)
-
-	<-getEnd.waiting // wait
-
-	fmt.Printf("GetCancel OUT: %s\n", in.Name)
+	<-endrun.Chan() //<-waitFor.validStop // wait for valid solution  OR timeout
+	fmt.Printf("OUT: %s\n", in.Name)
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
-// check whether the proposed nonce/coinbase works with current block
-// TODO -this should return err as well
-func verify(soln *cpb.AnnounceRequest) bool {
-	// select {
-	// case <-getEnd.waiting:
-	// 	fmt.Printf("LATE proposed solution: %+v\n", soln)
-	// 	return true
-	// default:
-	fmt.Printf("received proposed solution: %+v\n", soln)
-	getEnd.mu.Lock()
+var endrun cpb.Abort
+
+func endRun() {
+	endrun.Cancel() // cancel waiting for a valid stop
+	fmt.Printf("New race!\n--------------------\n")
+}
+
+var newblock cpb.Abort
+
+// getNewBlocks watches the network for external winners and stops searah if we exceed period secs
+func getNewBlocks() {
+	newblock.New() // set up a new abort channel
 	select {
-	case <-getEnd.waiting: // already closed
-	default:
-		close(getEnd.waiting)
+	case <-newblock.Chan():
+		return
+	case <-time.After(17 * time.Second): // drop to endRun
 	}
-	getEnd.mu.Unlock()
-	return true
-	// }
-}
-
-type stoper struct {
-	mu      sync.Mutex
-	waiting chan struct{}
-}
-
-var getEnd stoper
-
-//TODO - move these out of here
-
-// prepares the candidate block and also provides user specific coibase data
-// TODO -this should return err as well
-func fetchWork(in *cpb.GetWorkRequest) *cpb.Work {
-	return &cpb.Work{Coinbase: in.Name, Block: []byte("hello world")}
+	// otherwise reach this after 17 seconds
+	endRun()
 }
 
 // initalise
@@ -139,7 +166,9 @@ func init() {
 	users.loggedIn = make(map[string]int)
 	users.nextID = -1
 
-	getSet.in.waiting = make(chan struct{})
+	getwork.theLine = make(chan struct{})
+	// getSet.on.theLine = make(chan struct{})
+	endrun.New()
 }
 
 func main() {
@@ -147,7 +176,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	go handleGate()
+
 	s := grpc.NewServer()
 	cpb.RegisterCoinServer(s, &server{})
 	s.Serve(lis)
+
 }

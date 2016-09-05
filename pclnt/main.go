@@ -18,6 +18,8 @@ const (
 	defaultName = "busiso"
 )
 
+var waitForCancel chan struct{}
+
 func getWork(c cpb.CoinClient, name string) {
 	// get ready, get set ... this needs to block
 	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
@@ -25,12 +27,10 @@ func getWork(c cpb.CoinClient, name string) {
 		log.Fatalf("could not get work: %v", err)
 	}
 	log.Printf("Got work %+v\n", r.Work)
-	go getCancel(c, context.Background(), name)
+	go getCancel(c, name)
 	// search blocks
 	search(c, r.Work)
 	<-waitForCancel
-	// then reset it
-	waitForCancel = make(chan struct{})
 }
 
 // annouceWin is what causes the server to issue a cancellation
@@ -42,20 +42,9 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	log.Printf("Solution verified: %+v\n", r.Ok)
 }
 
-var waitForCancel chan struct{}
-
-// func gotcancel() bool {
-// 	select {
-// 	case <-waitForCancel:
-// 		return true
-// 	default:
-// 		return false
-// 	}
-// }
-
 // getCancel makes a blocking request to the server
-func getCancel(c cpb.CoinClient, ctx context.Context, name string) { //tODO make use of ctx.Done()
-	r, err := c.GetCancel(ctx, &cpb.GetCancelRequest{Name: name})
+func getCancel(c cpb.CoinClient, name string) { //tODO make use of ctx.Done()
+	r, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
@@ -65,35 +54,27 @@ func getCancel(c cpb.CoinClient, ctx context.Context, name string) { //tODO make
 
 // search tosses two dice waiting for a double 5
 func search(c cpb.CoinClient, work *cpb.Work) {
-	var foundit uint32
+	var theNonce uint32
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; cn < 100; cn++ {
 		a, b := toss(), toss()
-		if a == b && a == 5 {
-			foundit = uint32(cn) // our nonce
+		if a == b && a == 5 { // a win?
+			theNonce = uint32(cn) // our nonce
 			break
 		}
 		<-tick
 		fmt.Println(myID, " ", cn)
 		// check for a stop order
-		select {
-		case <-waitForCancel:
+		if gotcancel() {
 			break
-		default: // keep going
 		}
-		// if gotcancel() {
-		// 	break
-		// }
 	}
-	if foundit > 0 {
+	if theNonce > 0 { // really was a win (not a cancel!)
 		fmt.Printf("== %d == FOUND it\n", myID)
-		//close(waitForCancel)
-		annouceWin(c, foundit, work.Coinbase)
+		annouceWin(c, theNonce, work.Coinbase)
 	}
 	fmt.Printf("[%d] .. BYE\n", myID)
 }
-
-// TODO Move these out ??
 
 // dice
 func toss() int {
@@ -103,6 +84,22 @@ func toss() int {
 // convert nonce/coinbase to a cpb.Win object for annouceWin
 func toWin(nonce uint32, coinbase string) *cpb.Win {
 	return &cpb.Win{Coinbase: coinbase, Nonce: nonce}
+}
+
+func gotcancel() bool {
+	select {
+	case <-waitForCancel:
+		return true
+	default:
+		return false
+	}
+}
+
+// tell server that we are ready
+func announceReady(user string) {
+	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", user)
+	// reset channel
+	waitForCancel = make(chan struct{})
 }
 
 func init() {
@@ -133,17 +130,14 @@ func main() {
 	log.Printf("Login successful. Assigned id: %d\n", r.Id)
 
 	myID = r.Id
+
 	// TODO - convert the context to have a timeout here
 
-	// search
+	// search // for k := 0; ; k++ {
 
-	fmt.Printf("fetching work %s ..\n", name)
-	getWork(c, name)
-	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
-
-	for k := 0; ; k++ {
+	for {
 		fmt.Printf("fetching work %s ..\n", name)
 		getWork(c, name)
-		fmt.Printf("LOGOUT: %s ..\n-----------------------\n", name)
+		announceReady(name)
 	}
 }

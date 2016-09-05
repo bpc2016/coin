@@ -1,0 +1,6 @@
+
+* utils.go - deal with guarded abort channel
+* simultaneous discovery - here we need to ignore the second
+* take care of 'collapsing' miners
+* deal with wanting at least m of N miners operating: fault tolerance
+* distributing work (mod m)
