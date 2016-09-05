@@ -46,12 +46,9 @@ var getwork cpb.Abort
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	inGate <- in.Name // register
 	fmt.Printf("GetWork req: %+v\n", in)
-
-	<-getwork.Chan() // all must wait
-	//fmt.Printf("freed: %+v\n", in)
-
+	inGate <- in.Name     // register
+	<-getwork.Chan()      // all must wait
 	work := fetchWork(in) // work assigned this miner
 	return &cpb.GetWorkReply{Work: work}, nil
 }
@@ -60,7 +57,6 @@ var inGate, outGate chan string // unbuffered
 
 func incomingGate() {
 	for {
-		fmt.Println("\nincoming ready ...")
 		for i := 0; i < enoughWorkers; i++ {
 			fmt.Printf("(%d) registered %s\n", i, <-inGate)
 		}
@@ -99,17 +95,19 @@ func endRun() {
 	}
 	endrun.Cancel() // cancel waiting for a valid stop
 	fmt.Printf("\nNew race!\n--------------------\n")
+	newblock.Revive()
 }
 
 var newblock cpb.Abort
 
-// getNewBlocks watches the network for external winners and stops searah if we exceed period secs
+// getNewBlocks watches the network for external winners and stops search if we exceed period secs
 func getNewBlocks() {
 	select {
 	case <-newblock.Chan():
 		return
 	case <-time.After(17 * time.Second): // drop to endRun
 	}
+	fmt.Println("\nOVER 17 steps...")
 	// otherwise reach this after 17 seconds
 	endRun()
 }
