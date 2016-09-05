@@ -156,20 +156,12 @@ func weWonOutAlready() bool {
 // getNewBlocks watches the network for external winners and stops searah if we exceed period secs
 func getNewBlocks() {
 	watchNet.weWon = make(chan struct{})
-	// tick := time.Tick(1 * time.Second)
-	// period := 37 // seconds after which we cancel search
-	// for i := 0; i < period; i++ {
-	// 	<-tick // continue, but check every second
-	// 	if weWonOutAlready() {
-	// 		return // because we won, endRun called elsewhere
-	// 	}
-	// }
 	select {
 	case <-watchNet.weWon:
 		return
 	case <-time.After(17 * time.Second): // drop to endRun
 	}
-	// otherwise reach this after period seconds
+	// otherwise reach this after 17 seconds
 	endRun()
 }
 
