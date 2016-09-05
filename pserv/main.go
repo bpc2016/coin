@@ -48,7 +48,7 @@ var getwork chan struct{} // cpb.Abort
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("GetWork req: %+v\n", in)
 	inGate <- in.Name     // register
-	<-getwork             //.Chan()      // all must wait
+	<-getwork             // all must wait
 	work := fetchWork(in) // work assigned this miner
 	return &cpb.GetWorkReply{Work: work}, nil
 }
@@ -60,7 +60,7 @@ func incomingGate() {
 		for i := 0; i < enoughWorkers; i++ {
 			fmt.Printf("(%d) registered %s\n", i, <-inGate)
 		}
-		close(getwork) //.Cancel()
+		close(getwork)
 		endrun = make(chan struct{})
 		go getNewBlocks() // models watching the entire network, timeout our search
 	}
@@ -73,8 +73,11 @@ func fetchWork(in *cpb.GetWorkRequest) *cpb.Work { // TODO -this should return e
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	newblock.Cancel() // cancel previous getNewBlocks
-	checked := true   // TODO - accommodate possible mistaken solution
+	if newblock.Cancel() { // cancel previous getNewBlocks
+		// was previously called!!
+		return &cpb.AnnounceReply{Ok: false}, nil // we are late
+	}
+	checked := true // TODO - accommodate possible mistaken solution
 	fmt.Printf("\nWe won!: %+v\n", soln)
 	endRun()
 	return &cpb.AnnounceReply{Ok: checked}, nil
@@ -90,7 +93,6 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 var endrun chan struct{} // cpb.Abort
 
 func endRun() {
-	fmt.Println("outgoing ready ...")
 	for i := 0; i < enoughWorkers; i++ {
 		fmt.Printf("[%d] de_register %s\n", i, <-outGate)
 	}
@@ -120,7 +122,6 @@ func init() {
 
 	newblock.New() // = make(chan struct{})
 	getwork = make(chan struct{})
-	// endrun = make(chan struct{})
 
 	inGate = make(chan string)
 	outGate = make(chan string)
