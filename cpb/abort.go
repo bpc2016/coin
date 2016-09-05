@@ -7,8 +7,7 @@ import "sync"
 // Abort is a secured channel
 type Abort struct {
 	sync.Mutex
-	ch    chan struct{}
-	count int
+	ch chan struct{}
 }
 
 // IsClosed returns a function that tests whether our channel is closed

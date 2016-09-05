@@ -42,13 +42,13 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var getwork cpb.Abort
+var getwork chan struct{} // cpb.Abort
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("GetWork req: %+v\n", in)
 	inGate <- in.Name     // register
-	<-getwork.Chan()      // all must wait
+	<-getwork             //.Chan()      // all must wait
 	work := fetchWork(in) // work assigned this miner
 	return &cpb.GetWorkReply{Work: work}, nil
 }
@@ -60,7 +60,8 @@ func incomingGate() {
 		for i := 0; i < enoughWorkers; i++ {
 			fmt.Printf("(%d) registered %s\n", i, <-inGate)
 		}
-		getwork.Cancel()
+		close(getwork) //.Cancel()
+		endrun = make(chan struct{})
 		go getNewBlocks() // models watching the entire network, timeout our search
 	}
 }
@@ -82,20 +83,21 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	outGate <- in.Name // register
-	<-endrun.Chan()    // wait for valid solution  OR timeout
+	<-endrun           // wait for valid solution  OR timeout
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
-var endrun cpb.Abort
+var endrun chan struct{} // cpb.Abort
 
 func endRun() {
 	fmt.Println("outgoing ready ...")
 	for i := 0; i < enoughWorkers; i++ {
 		fmt.Printf("[%d] de_register %s\n", i, <-outGate)
 	}
-	endrun.Cancel() // cancel waiting for a valid stop
+	close(endrun) // cancel waiting for a valid stop
 	fmt.Printf("\nNew race!\n--------------------\n")
 	newblock.Revive()
+	getwork = make(chan struct{})
 }
 
 var newblock cpb.Abort
@@ -107,7 +109,6 @@ func getNewBlocks() {
 		return
 	case <-time.After(17 * time.Second): // drop to endRun
 	}
-	fmt.Println("\nOVER 17 steps...")
 	// otherwise reach this after 17 seconds
 	endRun()
 }
@@ -117,9 +118,9 @@ func init() {
 	users.loggedIn = make(map[string]int)
 	users.nextID = -1
 
-	newblock.New() // set up a new abort channel
-	getwork.New()
-	endrun.New()
+	newblock.New() // = make(chan struct{})
+	getwork = make(chan struct{})
+	// endrun = make(chan struct{})
 
 	inGate = make(chan string)
 	outGate = make(chan string)
@@ -136,5 +137,4 @@ func main() {
 	s := grpc.NewServer()
 	cpb.RegisterCoinServer(s, &server{})
 	s.Serve(lis)
-
 }
