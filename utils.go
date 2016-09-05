@@ -1,35 +1,8 @@
-// packag coin implements distributed bitcoin mining.
+// Package coin implements distributed bitcoin mining.
 // this part has utilities
 package coin
 
 import "sync"
-
-/*
-// refresh the channel
-
-    getSet.mu.Lock()
-    getSet.on.theLine = make(chan struct{})
-    getSet.mu.Unlock()
-
-// safe close
-    watchNet.mu.Lock()
-	if !weWonOutAlready() {
-		close(watchNet.weWon) // cancel previous getNewBlocks
-	}
-	watchNet.mu.Unlock()
-
-// new should also generate this test function
-
-    func weWonOutAlready() bool {
-	select {
-	case <-watchNet.weWon:
-		return true
-	default:
-		return false
-	}
-}
-
-*/
 
 // Abort is a secured channel
 type Abort struct {
@@ -75,4 +48,9 @@ func (ab *Abort) Revive() {
 		ab.ch = make(chan struct{})
 	}
 	ab.mu.Unlock()
+}
+
+// Chan exposes our channel for use
+func (ab *Abort) Chan() chan struct{} {
+	return ab.ch
 }
