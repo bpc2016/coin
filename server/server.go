@@ -1,214 +1,208 @@
-// Package Server directs bitcoin mining operations. It runs a full
-// node and when a new block search begins, distributes search data
-// to remote client machines.
-package server
+package main
 
 import (
-	"coin"
-	"encoding/binary"
-	"encoding/hex"
+	cpb "coin/service"
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"sync"
+	"time"
+
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 )
 
-// pointers to the parts of the blockheader
 const (
-	version = 4  // 4 byte Version
-	prevblk = 36 // 32 byte previous block hash
-	merkle  = 68 // 32 byte merkle root hash
-	time    = 72 // 4 byte Unix time
-	bits    = 76 // 4 byte target for difficulty rating
-	nonce   = 80 // 4 byte nonce used
+	port      = ":50051"
+	numMiners = 3
+	timeOut   = 14
 )
 
-// SetTask takes incoming block data in and returns
-// a Task object which a miner uses to search for a winning hash
-func SetTask(in coin.InComing) coin.Task {
-	bhdr := make([]byte, 80)
+// server is used to implement cpb.CoinServer.
+type server struct{}
 
-	// version
-	writeUint32(bhdr[0:version], in.Version)
-
-	// prevous block
-	copy(bhdr[version:prevblk], coin.Reverse(hexToBytes(in.PrevBlock)))
-
-	// time
-	writeUint32(bhdr[merkle:time], in.TimeStamp)
-
-	// bits (target)
-	writeUint32(bhdr[time:bits], in.Bits)
-
-	// share target
-	if in.Share == 0 {
-		in.Share = 3 // minimum
-	}
-
-	// Merkle root data
-	merkle := make([]byte, 32)
-	if in.MerkleRoot != "" {
-		merkle = hexToBytes(in.MerkleRoot)
-	}
-
-	skeleton := []byte{} // default send empty
-	if len(in.TxHashes) > 0 && in.CoinBase != "" {
-		txes := append([]string{in.CoinBase}, in.TxHashes...)
-		mRootStr, skel, err := Merkle(txes)
-		if err == nil {
-			merkle = hexToBytes(mRootStr)
-			skeleton = skel
-		}
-	}
-
-	return coin.Task{
-		BH:       bhdr,                 // 80 byte slice
-		MH:       merkle,               // 32 byte slice
-		Target:   targetBytes(in.Bits), // 32 byte slice
-		Share:    share(in.Share),      // 32 byte slice
-		CoinBase: in.CoinBase,          // string
-		Skeleton: skeleton,             // slice of 32*n bytes
-	}
+// logger type is for the users login details
+type logger struct {
+	sync.Mutex //anonymous
+	nextID     int
+	loggedIn   map[string]int
 }
 
-// writeUint32 write v into 4 bytes of slice
-func writeUint32(slice []byte, v uint32) {
-	binary.LittleEndian.PutUint32(slice, v)
+var users logger
+
+// Login implements cpb.CoinServer
+func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
+	users.Lock()
+	defer users.Unlock()
+	if _, ok := users.loggedIn[in.Name]; ok {
+		return nil, errors.New("You are already logged in!")
+	}
+	users.nextID++
+	users.loggedIn[in.Name] = users.nextID
+	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-// hexToBytes - takes a string s and returns a byte sequence
-// assume that s is in bigendian, so add extra 0 if odd length
-func hexToBytes(s string) []byte {
-	if len(s)%2 == 1 {
-		s = "0" + s
-	}
-	bts, err := hex.DecodeString(s)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return bts
+var getwork chan struct{}
+
+// GetWork implements cpb.CoinServer, synchronise start of miners
+func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
+	fmt.Printf("GetWork req: %+v\n", in)
+	inGate <- in.Name // register
+	<-getwork         // all must wait
+	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
-// targetBytes converts uint32 bits to a 32-byte sequence target
-// which is compared to block hashes. A
-// target is given by m*2**(8*(r-3)) where bits = r|m, r occupying
-// the top byte and m the lower 3 bytes of this uint32.
-func targetBytes(bits uint32) []byte {
-	r := bits >> 24           // top byte
-	m := (bits << 8) >> 8     // remaining three bytes
-	b := make([]byte, 32)     // expect 32 byte result but item is shorter
-	mBytes := make([]byte, 4) // receives m
-	pos := 32 - r
-	writeUint32(mBytes, m)
-	copy(b[pos:pos+3], mBytes[1:])
-	return b
+var block string
+
+// prepares the candidate block and also provides user specific coibase data
+func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
+	return &cpb.Work{Coinbase: name, Block: []byte(block)}
 }
 
-// share  returns a 32 byte sequence with k leading 0's
-// and the rest of the elements 0xff as a challenge that is
-// easier than the actual target
-func share(k int) []byte {
-	byteseq := make([]byte, k)
-	for i := 0; i < 32-k; i++ {
-		byteseq = append(byteseq, 0xff)
-	}
-	return byteseq
-}
+var inGate, outGate chan string
 
-type TxHashes []string
-
-// Merkle takes a list of transaction hashes (hex strings), reverses each one then
-// computes the Merkle root which is then reversed.
-//
-// The reversals are to accomodate the use case of Merkle root of the list of
-// hashes of transactions in a Block
-//
-// It also returns a byte sequence 'skeleton' of the  Merkle root computations which,
-// together with the first transaction, can be used to regenerate the root quickly
-func Merkle(list TxHashes) (string, []byte, error) {
-
-	// convert the hex strings to bytes, reversed
-	bytelist := make([][]byte, len(list))
-	for i, s := range list {
-		b, err := hex.DecodeString(s)
-		if err != nil {
-			return "", nil, err
-		}
-		bytelist[i] = coin.Reverse(b)
-	}
-
-	// use private merkleBytes to workon the byte sequences
-	resBytes, skeleton, err := merkleBytes(bytelist)
-	if err != nil {
-		return "", nil, err
-	}
-
-	// protocol demands a final reversal
-	resStr := fmt.Sprintf("%x", coin.Reverse(resBytes))
-	return resStr, skeleton, nil
-}
-
-// merkleBytes takes list txs of byte sequences and returns
-// the Merkle root. If the list has odd length, the final element is duplicated.
-// Replacing successive pairs with the double hash of their concatenation
-// yields a new list of half the length. This process is repeated until
-// just one 32-bytes slice remains.
-func merkleBytes(txs [][]byte) ([]byte, []byte, error) {
-	L := len(txs)
-	switch {
-	case L == 0:
-		return nil, nil, errors.New("Cannot handle empty data")
-	case L == 1:
-		return txs[0], nil, nil
-	case L%2 == 1:
-		{
-			txs = append(txs, txs[L-1])
-			L++
-		}
-	}
-	var (
-		i, M     int
-		skeleton []byte
-	)
+func incomingGate() {
 	for {
-		i, M = 0, 0
-		for {
-			if i == L {
-				break
-			}
-			txs[M] = coin.Hash2(txs[i], txs[i+1])
-			i, M = i+2, M+1
-			if M == 1 { // extend skeleton byte
-				skeleton = append(skeleton, txs[1]...)
-			}
+		for i := 0; i < numMiners; i++ {
+			fmt.Printf("(%d) registered %s\n", i, <-inGate)
 		}
-		if M == 1 { // exit with the single root
-			break
-		}
-		L = M
-		if L%2 == 1 {
-			txs[L] = txs[L-1]
-			L++
-		}
+		close(getwork)
+		endrun = make(chan struct{})
+		settled.Lock()
+		settled.ch = make(chan struct{})
+		settled.Unlock()
+		go extAnnounce()
+		// go getNewBlocks()
 	}
-	return txs[0], skeleton, nil
 }
 
-// getMerkle takes Skeleton and Coinbase an computes the
-// Merkle root (hex). This is properly in Client. Here for testing
-func getMerkle(coinbase string, skeleton []byte) (string, error) {
-	N := len(skeleton) / 32 	// the number of partial hashes = loops
-	cbBytes, err := hex.DecodeString(coinbase)
+type win struct {
+	who  string
+	data cpb.Win
+}
+
+// Announce responds to a proposed solution : implements cpb.CoinServer
+func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
+
+	// if newblock.Cancel() { // cancel previous getNewBlocks
+	// 	return &cpb.AnnounceReply{Ok: false}, nil // we are late
+	// }
+	// checked := true // TODO - accommodate possible mistaken solution
+	// fmt.Printf("\nWe won!: %+v\n", soln)
+	// endRun()
+
+	won := vetWin(win{who: "client", data: *soln.Win})
+	return &cpb.AnnounceReply{Ok: won}, nil
+}
+
+// extAnnounce is the analogue of 'Announce'
+func extAnnounce() {
+	select {
+	case <-settled.ch:
+		return
+	case <-time.After(timeOut * time.Second):
+		vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
+		return
+	}
+}
+
+// var mu sync.Mutex // guards settled
+// var settled chan struct{}
+
+var settled struct {
+	sync.Mutex
+	ch chan struct{}
+}
+
+// vetWins handle wins - all are directed here
+func vetWin(thewin win) bool {
+	settled.Lock()
+	defer settled.Unlock()
+	select {
+	case <-settled.ch: // closed if already have a winner
+		return false
+	default:
+		fmt.Printf("\nWinner is: %+v\n", thewin)
+		close(settled.ch) // until call for new run resets this one
+		endRun()          // SOLE call to endRun
+		return true
+	}
+}
+
+// GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
+func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
+	outGate <- in.Name // register
+	<-endrun           // wait for valid solution  OR timeout
+	return &cpb.GetCancelReply{Ok: true}, nil
+}
+
+var endrun chan struct{}
+
+// var hereFirst struct {
+// 	sync.RWMutex
+// 	set bool
+// }
+
+func endRun() {
+	// hereFirst.RLock()
+	// if hereFirst.set {
+	// 	hereFirst.RUnlock()
+	// 	return // skip this one
+	// }
+	// hereFirst.RUnlock()
+
+	// // get exclusive Lock
+	// hereFirst.Lock()
+	// defer hereFirst.Unlock()
+	// hereFirst.set = true
+
+	for i := 0; i < numMiners; i++ {
+		fmt.Printf("[%d] de_register %s\n", i, <-outGate)
+	}
+	close(endrun) // cancel waiting for a valid stop
+	fmt.Printf("\nNew race!\n--------------------\n")
+	//newblock.Revive()
+	getwork = make(chan struct{})
+	//hereFirst.set = false
+	block = fmt.Sprintf("BLOCK: %v", time.Now())
+}
+
+// var newblock Abort
+
+// getNewBlocks watches the network for external winners and stops search if we exceed period secs
+// func getNewBlocks() {
+// 	select {
+// 	case <-newblock.Chan():
+// 		return // let announce call endRun
+// 	case <-time.After(timeOut * time.Second):
+// 	}
+// 	endRun() // otherwise reach this after timeOut seconds
+// }
+
+// initalise
+func init() {
+	users.loggedIn = make(map[string]int)
+	users.nextID = -1
+
+	//newblock.New() // = make(chan struct{})
+	getwork = make(chan struct{})
+
+	inGate = make(chan string)
+	outGate = make(chan string)
+
+	block = fmt.Sprintf("BLOCK: %v", time.Now())
+}
+
+func main() {
+	lis, err := net.Listen("tcp", port)
 	if err != nil {
-		return "", err
+		log.Fatalf("failed to listen: %v", err)
 	}
 
-	// we need to reverse coinbase
-	part := coin.Reverse(cbBytes) 
+	go incomingGate()
 
-	// then climb up the tree	
-	for i := 0; i < N; i++ {
-		part = coin.Hash2(part, skeleton[32*i:32*(i+1)])
-	}
-	root := fmt.Sprintf("%x", coin.Reverse(part))
-	return root, nil
+	s := grpc.NewServer()
+	cpb.RegisterCoinServer(s, &server{})
+	s.Serve(lis)
 }

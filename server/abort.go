@@ -1,12 +1,12 @@
 // Package coin implements distributed bitcoin mining.
 // this part has utilities
-package coin
+package main
 
 import "sync"
 
 // Abort is a secured channel
 type Abort struct {
-	mu sync.Mutex
+	sync.Mutex
 	ch chan struct{}
 }
 
@@ -33,21 +33,23 @@ func (ab *Abort) isClosed() bool {
 }
 
 // Cancel safely closes our channel
-func (ab *Abort) Cancel() {
-	ab.mu.Lock()
+func (ab *Abort) Cancel() bool {
+	ab.Lock()
+	defer ab.Unlock()
 	if !ab.isClosed() {
 		close(ab.ch)
+		return false
 	}
-	ab.mu.Unlock()
+	return true
 }
 
 // Revive regenerates our channel
 func (ab *Abort) Revive() {
-	ab.mu.Lock()
+	ab.Lock()
 	if ab.isClosed() {
 		ab.ch = make(chan struct{})
 	}
-	ab.mu.Unlock()
+	ab.Unlock()
 }
 
 // Chan exposes our channel for use
