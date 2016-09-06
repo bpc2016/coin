@@ -43,6 +43,7 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 }
 
 var getwork chan struct{} // cpb.Abort
+var block string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
@@ -51,6 +52,11 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	<-getwork             // all must wait
 	work := fetchWork(in) // work assigned this miner
 	return &cpb.GetWorkReply{Work: work}, nil
+}
+
+// prepares the candidate block and also provides user specific coibase data
+func fetchWork(in *cpb.GetWorkRequest) *cpb.Work { // TODO -this should return err as well
+	return &cpb.Work{Coinbase: in.Name, Block: []byte(block)}
 }
 
 var inGate, outGate chan string // unbuffered
@@ -64,11 +70,6 @@ func incomingGate() {
 		endrun = make(chan struct{})
 		go getNewBlocks() // models watching the entire network, timeout our search
 	}
-}
-
-// prepares the candidate block and also provides user specific coibase data
-func fetchWork(in *cpb.GetWorkRequest) *cpb.Work { // TODO -this should return err as well
-	return &cpb.Work{Coinbase: in.Name, Block: []byte("hello world")}
 }
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
@@ -100,6 +101,8 @@ func endRun() {
 	fmt.Printf("\nNew race!\n--------------------\n")
 	newblock.Revive()
 	getwork = make(chan struct{})
+
+	block = fmt.Sprintf("BLOCK:\n%v", time.Now())
 }
 
 var newblock cpb.Abort
@@ -108,8 +111,8 @@ var newblock cpb.Abort
 func getNewBlocks() {
 	select {
 	case <-newblock.Chan():
-		return
-	case <-time.After(17 * time.Second): // drop to endRun
+		return // let announce call endRun
+	case <-time.After(17 * time.Second):
 	}
 	// otherwise reach this after 17 seconds
 	endRun()
@@ -125,6 +128,8 @@ func init() {
 
 	inGate = make(chan string)
 	outGate = make(chan string)
+
+	block = fmt.Sprintf("BLOCK:\n%v", time.Now())
 }
 
 func main() {
