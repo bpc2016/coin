@@ -43,14 +43,14 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var getwork chan struct{}
+var workgate chan struct{}
 var signIn chan string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	fmt.Printf("GetWork req: %+v\n", in)
+	fmt.Printf("Work requested: %+v\n", in)
 	signIn <- in.Name // register
-	<-getwork         // all must wait
+	<-workgate        // all must wait
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -59,20 +59,6 @@ var block string
 // prepares the candidate block and also provides user specific coibase data
 func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
 	return &cpb.Work{Coinbase: name, Block: []byte(block)}
-}
-
-func startRun() {
-	for {
-		for i := 0; i < numMiners; i++ {
-			fmt.Printf("(%d) registered %s\n", i, <-signIn)
-		}
-		endrun = make(chan struct{})
-		settled.Lock()
-		settled.ch = make(chan struct{})
-		settled.Unlock()
-		close(getwork)   // start our miners
-		go extAnnounce() // start external miners
-	}
 }
 
 type win struct {
@@ -130,12 +116,29 @@ var endrun chan struct{}
 
 func endRun() {
 	for i := 0; i < numMiners; i++ {
-		fmt.Printf("[%d] de_register %s\n", i, <-signOut)
+		miner := <-signOut
+		fmt.Printf("[%d] de_register %s\n", i, miner)
 	}
 	close(endrun) // issue cancellation to our clients
-	fmt.Printf("\nNew race!\n--------------------\n")
-	getwork = make(chan struct{})
+	workgate = make(chan struct{})
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
+
+	fmt.Printf("\nNew race!\n--------------------\n")
+}
+
+func startRun() {
+	for {
+		for i := 0; i < numMiners; i++ {
+			miner := <-signIn
+			fmt.Printf("(%d) registered %s\n", i, miner)
+		}
+		endrun = make(chan struct{})
+		settled.Lock()
+		settled.ch = make(chan struct{})
+		settled.Unlock()
+		close(workgate)  // start our miners
+		go extAnnounce() // start external miners
+	}
 }
 
 // initalise
@@ -153,7 +156,7 @@ func main() {
 	signIn = make(chan string)
 	signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
-	getwork = make(chan struct{})
+	workgate = make(chan struct{})
 
 	go startRun()
 
