@@ -29,7 +29,11 @@ func getWork(c cpb.CoinClient, name string) {
 	log.Printf("Got work %+v\n", r.Work)
 	go getCancel(c, name)
 	// search blocks
-	search(c, r.Work)
+	theNonce, ok := search(r.Work)
+	if ok {
+		fmt.Printf("%d ... sending solution \n", myID)
+		annouceWin(c, theNonce, r.Work.Coinbase)
+	}
 	<-waitForCancel
 }
 
@@ -39,41 +43,42 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
-	log.Printf("Solution verified: %+v\n", r.Ok)
+	if r.Ok { // it's possible that my winning nonce was late!
+		// log.Print("I won!\n")
+		fmt.Printf("== %d == FOUND it (%d)\n", myID, nonce)
+	}
 }
 
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string) { //tODO make use of ctx.Done()
-	r, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
-	if err != nil {
+	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
-	log.Printf("Got cancel message: %+v\n", r.Ok)
+	log.Printf("Got cancellation!\n")
 	close(waitForCancel) // assume that we got an ok=true
 }
 
-// search tosses two dice waiting for a double 5
-func search(c cpb.CoinClient, work *cpb.Work) {
+// search tosses two dice waiting for a double 5. exit on cancel or win
+func search(work *cpb.Work) (uint32, bool) {
 	var theNonce uint32
+	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; cn < 100; cn++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 { // a win?
-			theNonce = uint32(cn) // our nonce
+			theNonce = uint32(cn)
+			ok = true
 			break
 		}
-		<-tick
-		fmt.Println(myID, " ", cn)
 		// check for a stop order
 		if gotcancel() {
 			break
 		}
+		<-tick
+		fmt.Println(myID, " ", cn)
 	}
-	if theNonce > 0 { // really was a win (not a cancel!)
-		fmt.Printf("== %d == FOUND it\n", myID)
-		annouceWin(c, theNonce, work.Coinbase)
-	}
-	fmt.Printf("[%d] .. BYE\n", myID)
+	// fmt.Printf("[%d] .. BYE\n", myID)
+	return theNonce, ok
 }
 
 // dice
