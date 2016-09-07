@@ -30,6 +30,13 @@ func getWork(c cpb.CoinClient, name string) {
 	go getCancel(c, name)
 	// search blocks
 	theNonce, ok := search(r.Work)
+
+	// this is just for testing: we are interested in teh case where cancellation
+	// coincides with a win by another miner
+	if ok && gotcancel() {
+		fmt.Printf("CANCELLED  ok=%v, I am (%d)\n", ok, myID)
+	}
+
 	if ok {
 		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 		annouceWin(c, theNonce, r.Work.Coinbase)
@@ -69,18 +76,39 @@ func search(work *cpb.Work) (uint32, bool) {
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; ; cn++ {
 
-		if myID != 2 && cn%3 == 1 { // CHEAT, make 0 1 win at once every 3rd time +1
-			theNonce = uint32(cn)
-			ok = true
-			break
-		}
+		// have miners 0, 1 win at the same time when cn ==2
+		//
+		// if myID != 2 && cn == 2 { // CHEAT,
+		// 	theNonce = uint32(cn)
+		// 	ok = true
+		// 	break
+		// }
 
+		// have all miners win when cn == 6
+		//
+		// if cn == 6 { // CHEAT,
+		// 	theNonce = uint32(cn)
+		// 	ok = true
+		// 	break
+		// }
+
+		// coincide with external solution: make this just client
+		// need to run this with tossing turned off
+		//
+		// if myID == 0 && cn == 14 { // CHEAT,
+		// 	theNonce = uint32(cn)
+		// 	ok = true
+		// 	break
+		// }
+
+		// toss twice
 		a, b := toss(), toss()
 		if a == b && a == 5 { // a win?
 			theNonce = uint32(cn)
 			ok = true
 			break
 		}
+
 		// check for a stop order
 		if gotcancel() {
 			break
