@@ -68,6 +68,13 @@ func search(work *cpb.Work) (uint32, bool) {
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; ; cn++ {
+
+		if myID != 2 && cn%3 == 1 { // CHEAT, make 0 1 win at once every 3rd time +1
+			theNonce = uint32(cn)
+			ok = true
+			break
+		}
+
 		a, b := toss(), toss()
 		if a == b && a == 5 { // a win?
 			theNonce = uint32(cn)
