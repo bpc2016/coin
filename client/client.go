@@ -31,7 +31,7 @@ func getWork(c cpb.CoinClient, name string) {
 	// search blocks
 	theNonce, ok := search(r.Work)
 	if ok {
-		fmt.Printf("%d ... sending solution \n", myID)
+		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 		annouceWin(c, theNonce, r.Work.Coinbase)
 	}
 	<-waitForCancel
@@ -39,23 +39,27 @@ func getWork(c cpb.CoinClient, name string) {
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
-	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: toWin(nonce, coinbase)})
+	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
+	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
 	if r.Ok { // it's possible that my winning nonce was late!
-		// log.Print("I won!\n")
 		fmt.Printf("== %d == FOUND it (%d)\n", myID, nonce)
 	}
 }
 
 // getCancel makes a blocking request to the server
-func getCancel(c cpb.CoinClient, name string) { //tODO make use of ctx.Done()
+func getCancel(c cpb.CoinClient, name string) {
 	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
-	log.Printf("Got cancellation!\n")
 	close(waitForCancel) // assume that we got an ok=true
+}
+
+// dice
+func toss() int {
+	return rand.Intn(6)
 }
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
@@ -63,7 +67,7 @@ func search(work *cpb.Work) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
-	for cn := 0; cn < 100; cn++ {
+	for cn := 0; ; cn++ {
 		a, b := toss(), toss()
 		if a == b && a == 5 { // a win?
 			theNonce = uint32(cn)
@@ -77,18 +81,7 @@ func search(work *cpb.Work) (uint32, bool) {
 		<-tick
 		fmt.Println(myID, " ", cn)
 	}
-	// fmt.Printf("[%d] .. BYE\n", myID)
 	return theNonce, ok
-}
-
-// dice
-func toss() int {
-	return rand.Intn(6)
-}
-
-// convert nonce/coinbase to a cpb.Win object for annouceWin
-func toWin(nonce uint32, coinbase string) *cpb.Win {
-	return &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 }
 
 func gotcancel() bool {
@@ -98,13 +91,6 @@ func gotcancel() bool {
 	default:
 		return false
 	}
-}
-
-// tell server that we are ready
-func announceReady(user string) {
-	fmt.Printf("LOGOUT: %s ..\n-----------------------\n", user)
-	// reset channel
-	waitForCancel = make(chan struct{})
 }
 
 func init() {
@@ -136,13 +122,12 @@ func main() {
 
 	myID = r.Id
 
-	// TODO - convert the context to have a timeout here
-
-	// search // for k := 0; ; k++ {
-
 	for {
-		fmt.Printf("fetching work %s ..\n", name)
-		getWork(c, name)
-		announceReady(name)
+		fmt.Printf("Fetching work %s ..\n", name)
+
+		getWork(c, name) // main work done here
+
+		fmt.Printf("-----------------------\n")
+		waitForCancel = make(chan struct{}) // reset channel
 	}
 }
