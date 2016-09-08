@@ -105,7 +105,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("could not get work: %v", err)
 		}
-		log.Printf("Work --> %+v\n", r.Work)
+		log.Printf("Work=\n%+v\n", r.Work)
 		// listen for a cancellation
 		go getCancel(c, name, waitForCancel)
 		// search blocks
