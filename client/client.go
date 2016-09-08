@@ -18,18 +18,16 @@ const (
 	defaultName = "busiso"
 )
 
-var waitForCancel chan struct{}
-
-func getWork(c cpb.CoinClient, name string) {
+func getWork(c cpb.CoinClient, name string, waitForCancel chan struct{}) {
 	// get ready, get set ... this needs to block
 	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not get work: %v", err)
 	}
 	log.Printf("Got work %+v\n", r.Work)
-	go getCancel(c, name)
+	go getCancel(c, name, waitForCancel)
 	// search blocks
-	theNonce, ok := search(r.Work)
+	theNonce, ok := search(r.Work, waitForCancel)
 
 	// a good place to check whether we are cancelled when we have a solution too
 
@@ -53,7 +51,7 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 }
 
 // getCancel makes a blocking request to the server
-func getCancel(c cpb.CoinClient, name string) {
+func getCancel(c cpb.CoinClient, name string, waitForCancel chan struct{}) {
 	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
@@ -66,7 +64,7 @@ func toss() int {
 }
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
-func search(work *cpb.Work) (uint32, bool) {
+func search(work *cpb.Work, waitForCancel chan struct{}) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
@@ -93,7 +91,6 @@ done:
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	waitForCancel = make(chan struct{})
 }
 
 var myID uint32
@@ -122,10 +119,8 @@ func main() {
 
 	for {
 		fmt.Printf("Fetching work %s ..\n", name)
-
-		getWork(c, name) // main work done here
-
+		waitForCancel := make(chan struct{})
+		getWork(c, name, waitForCancel) // main work done here
 		fmt.Printf("-----------------------\n")
-		waitForCancel = make(chan struct{}) // reset channel
 	}
 }
