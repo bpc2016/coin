@@ -26,7 +26,7 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 		log.Fatalf("could not announce win: %v", err)
 	}
 	if r.Ok { // it's possible that my winning nonce was late!
-		fmt.Printf("== %d == FOUND it (%d)\n", myID, nonce)
+		fmt.Printf("== %d == NONCE --> %d\n", myID, nonce)
 	}
 }
 
@@ -98,21 +98,21 @@ func main() {
 	myID = r.Id
 
 	for {
-		fmt.Printf("Fetching work %s ..\n", name)
+		fmt.Printf("(%s) fetching work...\n", name)
 		waitForCancel := make(chan struct{})
 		// go out for work
 		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 		if err != nil {
 			log.Fatalf("could not get work: %v", err)
 		}
-		log.Printf("Got work %+v\n", r.Work)
+		log.Printf("Work --> %+v\n", r.Work)
 		// listen for a cancellation
 		go getCancel(c, name, waitForCancel)
 		// search blocks
 		theNonce, ok := search(r.Work, waitForCancel)
 		// a good place to check whether we are cancelled when we have a solution too
 		if ok {
-			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+			fmt.Printf("(%d) ... sending solution --> %d\n", myID, theNonce)
 			annouceWin(c, theNonce, r.Work.Coinbase)
 		}
 
