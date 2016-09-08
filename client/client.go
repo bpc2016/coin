@@ -106,23 +106,31 @@ func search(work *cpb.Work) (uint32, bool) {
 		}
 
 		// check for a stop order
-		if gotcancel() {
+		if func() bool {
+			select {
+			case <-waitForCancel:
+				return true
+			default:
+				return false
+			}
+		}() {
 			break
 		}
+
 		<-tick
 		fmt.Println(myID, " ", cn)
 	}
 	return theNonce, ok
 }
 
-func gotcancel() bool {
-	select {
-	case <-waitForCancel:
-		return true
-	default:
-		return false
-	}
-}
+// func gotcancel() bool {
+// 	select {
+// 	case <-waitForCancel:
+// 		return true
+// 	default:
+// 		return false
+// 	}
+// }
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
