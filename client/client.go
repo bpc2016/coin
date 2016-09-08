@@ -31,11 +31,7 @@ func getWork(c cpb.CoinClient, name string) {
 	// search blocks
 	theNonce, ok := search(r.Work)
 
-	// this is just for testing: we are interested in teh case where cancellation
-	// coincides with a win by another miner
-	if ok && gotcancel() {
-		fmt.Printf("CANCELLED  ok=%v, I am (%d)\n", ok, myID)
-	}
+	// a good place to check whether we are cancelled when we have a solution too
 
 	if ok {
 		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
