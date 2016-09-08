@@ -18,25 +18,25 @@ const (
 	defaultName = "busiso"
 )
 
-func getWork(c cpb.CoinClient, name string, waitForCancel chan struct{}) {
-	// get ready, get set ... this needs to block
-	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not get work: %v", err)
-	}
-	log.Printf("Got work %+v\n", r.Work)
-	go getCancel(c, name, waitForCancel)
-	// search blocks
-	theNonce, ok := search(r.Work, waitForCancel)
+// func getWork(c cpb.CoinClient, name string, waitForCancel chan struct{}) {
+// 	// get ready, get set ... this needs to block
+// 	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+// 	if err != nil {
+// 		log.Fatalf("could not get work: %v", err)
+// 	}
+// 	log.Printf("Got work %+v\n", r.Work)
+// 	go getCancel(c, name, waitForCancel)
+// 	// search blocks
+// 	theNonce, ok := search(r.Work, waitForCancel)
 
-	// a good place to check whether we are cancelled when we have a solution too
+// 	// a good place to check whether we are cancelled when we have a solution too
 
-	if ok {
-		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-		annouceWin(c, theNonce, r.Work.Coinbase)
-	}
-	<-waitForCancel
-}
+// 	if ok {
+// 		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+// 		annouceWin(c, theNonce, r.Work.Coinbase)
+// 	}
+// 	<-waitForCancel
+// }
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
@@ -120,7 +120,24 @@ func main() {
 	for {
 		fmt.Printf("Fetching work %s ..\n", name)
 		waitForCancel := make(chan struct{})
-		getWork(c, name, waitForCancel) // main work done here
+		// getWork(c, name, waitForCancel) // main work done here
+		// get ready, get set ... this needs to block
+		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+		if err != nil {
+			log.Fatalf("could not get work: %v", err)
+		}
+		log.Printf("Got work %+v\n", r.Work)
+		// listen for a cancellation
+		go getCancel(c, name, waitForCancel)
+		// search blocks
+		theNonce, ok := search(r.Work, waitForCancel)
+		// a good place to check whether we are cancelled when we have a solution too
+		if ok {
+			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+			annouceWin(c, theNonce, r.Work.Coinbase)
+		}
+
+		<-waitForCancel // even if we have a solution
 		fmt.Printf("-----------------------\n")
 	}
 }
