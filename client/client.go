@@ -18,16 +18,14 @@ const (
 	defaultName = "busiso"
 )
 
-// annouceWin is what causes the server to issue a cancellation
-func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
+// annouceWin is what causes the server to issue a cancellation, returns whether our win is acknowledged
+func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
-	if r.Ok { // it's possible that my winning nonce was late!
-		fmt.Printf("== %d == NONCE --> %d\n", myID, nonce)
-	}
+	return r.Ok
 }
 
 // getCancel makes a blocking request to the server
@@ -112,11 +110,15 @@ func main() {
 		theNonce, ok := search(r.Work, waitForCancel)
 		// a good place to check whether we are cancelled when we have a solution too
 		if ok {
-			fmt.Printf("(%d) ... sending solution --> %d\n", myID, theNonce)
-			annouceWin(c, theNonce, r.Work.Coinbase)
+			fmt.Printf("(%d) ... sending solution: %d\n", myID, theNonce)
+			success := annouceWin(c, theNonce, r.Work.Coinbase)
+			if success { // it's possible that my winning nonce was late!
+				fmt.Printf("== %d == NONCE --> %d\n", myID, theNonce)
+			}
 		}
 
 		<-waitForCancel // even if we have a solution
+
 		fmt.Printf("-----------------------\n")
 	}
 }
