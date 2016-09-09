@@ -18,21 +18,27 @@ const (
 	defaultName = "busiso"
 )
 
+var TEST string // where are we
+
 // annouceWin is what causes the server to issue a cancellation, returns whether our win is acknowledged
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
+	TEST += "A"
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
+	TEST += "R"
 	return r.Ok
 }
 
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string, waitForCancel chan struct{}) {
+	TEST += "G"
 	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
+	TEST += "X"
 	close(waitForCancel) // assume that we got an ok=true
 }
 
@@ -51,6 +57,7 @@ func search(work *cpb.Work, waitForCancel chan struct{}) (uint32, bool) {
 		if a == b && a == 5 {  // a win?
 			theNonce = uint32(cn)
 			ok = true
+			TEST += "W"
 			break
 		}
 
@@ -107,18 +114,19 @@ func main() {
 		// listen for a cancellation
 		go getCancel(c, name, waitForCancel)
 		// search blocks
-		theNonce, ok := search(r.Work, waitForCancel)
+		theNonce, win := search(r.Work, waitForCancel)
 		// a good place to check whether we are cancelled when we have a solution too
-		if ok {
-			fmt.Printf("(%d) ... sending solution: %d\n", myID, theNonce)
+		if win {
+			fmt.Printf("(%d) ... sending solution: %d\n%s\n", myID, theNonce, TEST)
 			success := annouceWin(c, theNonce, r.Work.Coinbase)
 			if success { // it's possible that my winning nonce was late!
-				fmt.Printf("== %d == NONCE --> %d\n", myID, theNonce)
+				fmt.Printf("== %d == NONCE --> %d\n%s\n", myID, theNonce, TEST)
 			}
 		}
 
 		<-waitForCancel // even if we have a solution
 
 		fmt.Printf("-----------------------\n")
+		TEST = ""
 	}
 }
