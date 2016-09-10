@@ -15,7 +15,7 @@ import (
 
 const (
 	port      = ":50051"
-	numMiners = 3
+	numMiners = 1
 	timeOut   = 14
 )
 
@@ -41,23 +41,6 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	users.nextID++
 	users.loggedIn[in.Name] = users.nextID
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
-}
-
-var minersIn, run sync.WaitGroup
-
-// GetWork implements cpb.CoinServer, synchronise start of miners
-func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	fmt.Printf("Work requested: %+v\n", in)
-	minersIn.Add(-1) // we work downwards from numMiners
-	run.Wait()       // all must wait here
-	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
-}
-
-var block string
-
-// prepares the candidate block and also provides user specific coibase data
-func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
-	return &cpb.Work{Coinbase: name, Block: []byte(block)}
 }
 
 type win struct {
@@ -123,6 +106,23 @@ func init() {
 	users.nextID = -1
 }
 
+var minersIn, run sync.WaitGroup
+
+// GetWork implements cpb.CoinServer, synchronise start of miners
+func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
+	fmt.Printf("Work requested: %+v\n", in)
+	minersIn.Add(-1) // we work downwards from numMiners
+	run.Wait()       // all must wait here
+	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
+}
+
+var block string
+
+// prepares the candidate block and also provides user specific coibase data
+func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
+	return &cpb.Work{Coinbase: name, Block: []byte(block)}
+}
+
 func main() {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -132,19 +132,21 @@ func main() {
 	block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
 	run.Add(1)                                   // updated in vetWin
 
-	minersIn.Add(numMiners)
-	minersOut.Add(numMiners)
+	minersIn.Add(1)
+	minersOut.Add(1)
 
 	go func() {
 		for {
-			minersIn.Wait()
-			minersIn.Add(numMiners)
+			minersIn.Wait() // for a work request
+			// then prep the cancel request
 			settled.Lock()
 			settled.ch = make(chan struct{})
 			settled.Unlock()
 			stop.Add(1)
+
 			run.Add(-1)      // start our miners
 			go extAnnounce() // start external miners
+			minersIn.Add(1)  // so that we pause above
 		}
 	}()
 
