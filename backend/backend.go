@@ -16,7 +16,7 @@ import (
 const (
 	port      = ":50051"
 	numMiners = 1
-	timeOut   = 14
+	timeOut   = 40
 )
 
 // server is used to implement cpb.CoinServer.
@@ -88,13 +88,13 @@ func vetWin(thewin win) bool {
 		return false
 	default:
 		fmt.Printf("\nWinner: %+v\n", thewin)
-		close(settled.ch)                            // until call for new run resets this one
-		minersOut.Wait()                             // pause for all to get cancellation
-		minersOut.Add(numMiners)                     // reset
-		stop.Add(-1)                                 // issue cancellations
+		close(settled.ch) // until call for new run resets this one
+		stop.Add(-1)      // issue cancellations
+		minersOut.Wait()  // pause for all to get cancellation
+
 		block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
 		run.Add(1)                                   // get ready for next work requests
-
+		minersOut.Add(1)                             // reset
 		fmt.Printf("\nNew race!\n--------------------\n")
 		return true
 	}

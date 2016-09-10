@@ -105,14 +105,15 @@ func vetWin(thewin win) bool {
 		return false
 	default:
 		fmt.Printf("\nWinner: %+v\n", thewin)
-		close(settled.ch)                            // until call for new run resets this one
-		minersOut.Wait()                             // pause for all to get cancellation
-		minersOut.Add(numMiners)                     // reset
-		stop.Add(-1)                                 // issue cancellations
+		close(settled.ch) // until call for new run resets this one
+		stop.Add(-1)      // issue cancellations
+		minersOut.Wait()  // pause for all to get cancellation
+
 		block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
 		run.Add(1)                                   // get ready for next work requests
-
+		minersOut.Add(numMiners)                     // reset
 		fmt.Printf("\nNew race!\n--------------------\n")
+
 		return true
 	}
 }
@@ -137,14 +138,16 @@ func main() {
 
 	go func() {
 		for {
-			minersIn.Wait()
-			minersIn.Add(numMiners)
-			settled.Lock()
+			minersIn.Wait() // for a work request
+
+			settled.Lock() // then prep the cancel request
 			settled.ch = make(chan struct{})
 			settled.Unlock()
 			stop.Add(1)
-			run.Add(-1)      // start our miners
-			go extAnnounce() // start external miners
+
+			run.Add(-1)             // start our miners
+			go extAnnounce()        // start external miners
+			minersIn.Add(numMiners) // so that we pause above
 		}
 	}()
 
