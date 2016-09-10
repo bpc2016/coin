@@ -43,14 +43,13 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var workgate chan struct{}
-var signIn chan string
+var minersIn, run sync.WaitGroup
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("Work requested: %+v\n", in)
-	signIn <- in.Name // register
-	<-workgate        // all must wait
+	minersIn.Add(-1) // we work downwards from numMiners
+	run.Wait()       // all must wait here
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -78,17 +77,17 @@ func extAnnounce() {
 	case <-settled.ch:
 		return
 	case <-time.After(timeOut * time.Second):
-		vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
+		vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "external", Nonce: 0}}) // bogus
 		return
 	}
 }
 
-var signOut chan string
+var minersOut, stop sync.WaitGroup
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	signOut <- in.Name // register
-	<-endrun           // wait for valid solution  OR timeout
+	minersOut.Add(-1) // we work downwards from numMiners
+	stop.Wait()       // wait for cancel signal
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
@@ -105,39 +104,16 @@ func vetWin(thewin win) bool {
 	case <-settled.ch: // closed if already have a winner
 		return false
 	default:
-		fmt.Printf("\nWinner is: %+v\n", thewin)
-		close(settled.ch) // until call for new run resets this one
-		endRun()          // SOLE call to endRun
+		fmt.Printf("\nWinner: %+v\n", thewin)
+		close(settled.ch)                            // until call for new run resets this one
+		minersOut.Wait()                             // pause for all to get cancellation
+		minersOut.Add(numMiners)                     // reset
+		stop.Add(-1)                                 // issue cancellations
+		block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
+		run.Add(1)                                   // get ready for next work requests
+
+		fmt.Printf("\nNew race!\n--------------------\n")
 		return true
-	}
-}
-
-var endrun chan struct{}
-
-func endRun() {
-	for i := 0; i < numMiners; i++ {
-		miner := <-signOut
-		fmt.Printf("[%d] de_register %s\n", i, miner)
-	}
-	close(endrun) // issue cancellation to our clients
-	workgate = make(chan struct{})
-	block = fmt.Sprintf("BLOCK: %v", time.Now())
-
-	fmt.Printf("\nNew race!\n--------------------\n")
-}
-
-func startRun() {
-	for {
-		for i := 0; i < numMiners; i++ {
-			miner := <-signIn
-			fmt.Printf("(%d) registered %s\n", i, miner)
-		}
-		endrun = make(chan struct{})
-		settled.Lock()
-		settled.ch = make(chan struct{})
-		settled.Unlock()
-		close(workgate)  // start our miners
-		go extAnnounce() // start external miners
 	}
 }
 
@@ -153,12 +129,24 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	signIn = make(chan string)
-	signOut = make(chan string)
-	block = fmt.Sprintf("BLOCK: %v", time.Now())
-	workgate = make(chan struct{})
+	block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
+	run.Add(1)                                   // updated in vetWin
 
-	go startRun()
+	minersIn.Add(numMiners)
+	minersOut.Add(numMiners)
+
+	go func() {
+		for {
+			minersIn.Wait()
+			minersIn.Add(numMiners)
+			settled.Lock()
+			settled.ch = make(chan struct{})
+			settled.Unlock()
+			stop.Add(1)
+			run.Add(-1)      // start our miners
+			go extAnnounce() // start external miners
+		}
+	}()
 
 	s := grpc.NewServer()
 	cpb.RegisterCoinServer(s, &server{})
