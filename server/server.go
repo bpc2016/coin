@@ -19,7 +19,10 @@ const (
 	timeOut = 14
 )
 
-var numMiners = flag.Int("m", 3, "number of miners")
+var (
+	numMiners = flag.Int("m", 3, "number of miners")
+	debug     = flag.Bool("d", false, "debug mode")
+)
 
 // logger type is for the users login details
 type logger struct {
@@ -47,7 +50,9 @@ var signIn chan string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	fmt.Printf("Work requested: %+v\n", in)
+	if *debug {
+		fmt.Printf("Work requested: %+v\n", in)
+	}
 	signIn <- in.Name // register
 	<-workgate        // all must wait
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
@@ -67,7 +72,7 @@ type win struct {
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	won := s.vetWin(win{who: "client", data: *soln.Win})
+	won := s.vetWin(*soln.Win)
 	return &cpb.AnnounceReply{Ok: won}, nil
 }
 
@@ -77,18 +82,19 @@ func (s *server) extAnnounce() {
 	case <-settled.ch:
 		return
 	case <-time.After(timeOut * time.Second):
-		s.vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
+		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
 		return
 	}
 }
 
-var endrun chan struct{}
+// var runover chan struct{}
+var runover sync.WaitGroup
 var signOut chan string
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	signOut <- in.Name // register
-	<-endrun           // wait for valid solution  OR timeout
+	runover.Wait()     //<-runover          // wait for valid solution  OR timeout
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
@@ -98,7 +104,7 @@ var settled struct {
 }
 
 // vetWins handle wins - all are directed here
-func (s *server) vetWin(thewin win) bool {
+func (s *server) vetWin(thewin cpb.Win) bool {
 	settled.Lock()
 	defer settled.Unlock()
 	select {
@@ -109,10 +115,8 @@ func (s *server) vetWin(thewin win) bool {
 		close(settled.ch) // until call for new run resets this one
 		for i := 0; i < *numMiners; i++ {
 			<-signOut
-			// miner := <-signOut
-			//fmt.Printf("[%d] de_register %s\n", i, miner)
 		}
-		close(endrun) // issue cancellation to our clients
+		runover.Done() //close(runover) // issue cancellation to our clients
 		workgate = make(chan struct{})
 		block = fmt.Sprintf("BLOCK: %v", time.Now())
 
@@ -149,10 +153,8 @@ func main() {
 		for {
 			for i := 0; i < *numMiners; i++ {
 				<-signIn
-				// miner := <-signIn
-				//fmt.Printf("(%d) registered %s\n", i, miner)
 			}
-			endrun = make(chan struct{})
+			runover.Add(1) //runover = make(chan struct{})
 			settled.Lock()
 			settled.ch = make(chan struct{})
 			settled.Unlock()
