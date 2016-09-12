@@ -15,7 +15,7 @@ import (
 
 const (
 	port      = ":50051"
-	numMiners = 3
+	numMiners = 30
 	timeOut   = 14
 )
 
