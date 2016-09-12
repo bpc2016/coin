@@ -45,7 +45,8 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var workgate chan struct{}
+var start sync.WaitGroup // var start chan struct{}
+
 var signIn chan string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
@@ -54,7 +55,7 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 		fmt.Printf("Work requested: %+v\n", in)
 	}
 	signIn <- in.Name // register
-	<-workgate        // all must wait
+	start.Wait()      //<-start        // all must wait
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -111,22 +112,23 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	case <-settled.ch: // closed if already have a winner
 		return false
 	default:
-		fmt.Printf("\nWinner is: %+v\n", thewin)
+		fmt.Printf("Winner is: %+v\n", thewin)
 		close(settled.ch) // until call for new run resets this one
 		for i := 0; i < *numMiners; i++ {
 			<-signOut
 		}
 		runover.Done() //close(runover) // issue cancellation to our clients
-		workgate = make(chan struct{})
+		start.Add(1)   //start = make(chan struct{})
 		block = fmt.Sprintf("BLOCK: %v", time.Now())
 
-		fmt.Printf("\nNew race!\n--------------------\n")
+		fmt.Printf("\n--------------------\nNew race!\n")
 		return true
 	}
 }
 
 // server is used to implement cpb.CoinServer.
-type server struct{}
+type server struct {
+}
 
 // initalise
 func init() {
@@ -147,7 +149,7 @@ func main() {
 	signIn = make(chan string)
 	signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
-	workgate = make(chan struct{})
+	start.Add(1) //start = make(chan struct{})
 
 	go func() {
 		for {
@@ -158,7 +160,7 @@ func main() {
 			settled.Lock()
 			settled.ch = make(chan struct{})
 			settled.Unlock()
-			close(workgate)    // start our miners
+			start.Done()       // close(start)       // start our miners
 			go s.extAnnounce() // start external miners
 		}
 	}()
