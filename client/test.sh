@@ -1,5 +1,5 @@
 #!/bin/bash
-        for i in `seq 11 30`;
+        for i in `seq 1 100`;
         do
-                ./client -t 3 -u $i  &
+                ./client -t 4 -u $i  &
         done     
