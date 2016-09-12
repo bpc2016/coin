@@ -45,17 +45,15 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var start sync.WaitGroup // var start chan struct{}
-
-// var signIn chan string
+var start sync.WaitGroup
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	if *debug {
-		fmt.Printf("Work requested: %+v\n", in)
+		fmt.Printf("Work request: %+v\n", in)
 	}
 	s.signIn <- in.Name // register
-	start.Wait()        //<-start        // all must wait
+	start.Wait()        // all must wait, start when this is Done()
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -66,11 +64,6 @@ func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
 	return &cpb.Work{Coinbase: name, Block: []byte(block)}
 }
 
-type win struct {
-	who  string
-	data cpb.Win
-}
-
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	won := s.vetWin(*soln.Win)
@@ -78,9 +71,9 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 }
 
 // extAnnounce is the analogue of 'Announce'
-func (s *server) extAnnounce() {
+func (s *server) extAnnounce(ch chan struct{}) {
 	select {
-	case <-settled.ch:
+	case <-ch: //s.search.ch:
 		return
 	case <-time.After(timeOut * time.Second):
 		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
@@ -88,38 +81,30 @@ func (s *server) extAnnounce() {
 	}
 }
 
-// var runover chan struct{}
-var runover sync.WaitGroup
-
-// var signOut chan string
+var stop sync.WaitGroup
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	s.signOut <- in.Name // register
-	runover.Wait()       //<-runover          // wait for valid solution  OR timeout
+	stop.Wait()          // wait for valid solution  OR timeout
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
-var settled struct {
-	sync.Mutex
-	ch chan struct{}
-}
-
-// vetWins handle wins - all are directed here
+// vetWins handles wins - all are directed here
 func (s *server) vetWin(thewin cpb.Win) bool {
-	settled.Lock()
-	defer settled.Unlock()
+	s.search.Lock()
+	defer s.search.Unlock()
 	select {
-	case <-settled.ch: // closed if already have a winner
+	case <-s.search.ch: // closed if already have a winner
 		return false
 	default:
-		fmt.Printf("Winner is: %+v\n", thewin)
-		close(settled.ch) // until call for new run resets this one
+		fmt.Printf("Winner: %+v\n", thewin)
+		close(s.search.ch) // until call for new run resets this one
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
-		runover.Done() //close(runover) // issue cancellation to our clients
-		start.Add(1)   //start = make(chan struct{})
+		stop.Done()  // issue cancellation to our clients
+		start.Add(1) // reset start waitgroup
 		block = fmt.Sprintf("BLOCK: %v", time.Now())
 
 		fmt.Printf("\n--------------------\nNew race!\n")
@@ -127,10 +112,16 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	}
 }
 
+type winchannel struct {
+	sync.Mutex
+	ch chan struct{}
+}
+
 // server is used to implement cpb.CoinServer.
 type server struct {
-	signIn  chan string
-	signOut chan string
+	signIn  chan string // for registering users in getwork
+	signOut chan string // for registering leaving users in getcancel
+	search  winchannel  // search.ch is closed when we have dclared a winner
 }
 
 // initalise
@@ -152,19 +143,17 @@ func main() {
 	s.signIn = make(chan string)
 	s.signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
-	start.Add(1) //start = make(chan struct{})
+	start.Add(1)
 
 	go func() {
 		for {
 			for i := 0; i < *numMiners; i++ {
 				<-s.signIn
 			}
-			runover.Add(1) //runover = make(chan struct{})
-			settled.Lock()
-			settled.ch = make(chan struct{})
-			settled.Unlock()
-			start.Done()       // close(start)       // start our miners
-			go s.extAnnounce() // start external miners
+			stop.Add(1)                       // prep channel for getcancels
+			s.search.ch = make(chan struct{}) // reset this channel
+			start.Done()                      // start our miners
+			go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
 
