@@ -67,17 +67,17 @@ type win struct {
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	won := vetWin(win{who: "client", data: *soln.Win})
+	won := s.vetWin(win{who: "client", data: *soln.Win})
 	return &cpb.AnnounceReply{Ok: won}, nil
 }
 
 // extAnnounce is the analogue of 'Announce'
-func extAnnounce() {
+func (s *server) extAnnounce() {
 	select {
 	case <-settled.ch:
 		return
 	case <-time.After(timeOut * time.Second):
-		vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
+		s.vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
 		return
 	}
 }
@@ -98,7 +98,7 @@ var settled struct {
 }
 
 // vetWins handle wins - all are directed here
-func vetWin(thewin win) bool {
+func (s *server) vetWin(thewin win) bool {
 	settled.Lock()
 	defer settled.Unlock()
 	select {
@@ -108,8 +108,9 @@ func vetWin(thewin win) bool {
 		fmt.Printf("\nWinner is: %+v\n", thewin)
 		close(settled.ch) // until call for new run resets this one
 		for i := 0; i < *numMiners; i++ {
-			miner := <-signOut
-			fmt.Printf("[%d] de_register %s\n", i, miner)
+			<-signOut
+			// miner := <-signOut
+			//fmt.Printf("[%d] de_register %s\n", i, miner)
 		}
 		close(endrun) // issue cancellation to our clients
 		workgate = make(chan struct{})
@@ -147,15 +148,16 @@ func main() {
 	go func() {
 		for {
 			for i := 0; i < *numMiners; i++ {
-				miner := <-signIn
-				fmt.Printf("(%d) registered %s\n", i, miner)
+				<-signIn
+				// miner := <-signIn
+				//fmt.Printf("(%d) registered %s\n", i, miner)
 			}
 			endrun = make(chan struct{})
 			settled.Lock()
 			settled.ch = make(chan struct{})
 			settled.Unlock()
-			close(workgate)  // start our miners
-			go extAnnounce() // start external miners
+			close(workgate)    // start our miners
+			go s.extAnnounce() // start external miners
 		}
 	}()
 
