@@ -15,12 +15,11 @@ import (
 )
 
 const (
-	port = ":50051"
-	// numMiners = 3
+	port    = ":50051"
 	timeOut = 14
 )
 
-var numMiners = flag.Int("n", 3, "number of miners")
+var numMiners = flag.Int("m", 3, "number of miners")
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
@@ -146,6 +145,8 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
+
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
