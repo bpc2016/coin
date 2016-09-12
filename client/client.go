@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -17,6 +18,8 @@ const (
 	address     = "localhost:50051"
 	defaultName = "busiso"
 )
+
+var tosses = flag.Int("t", 2, "number of tosses")
 
 var waitForCancel chan struct{}
 
@@ -69,6 +72,18 @@ func toss() int {
 	return rand.Intn(6)
 }
 
+// rools returns true if n tosses are all 5's
+func rolls(n int) bool {
+	ok := true
+	for i := 0; i < n; i++ {
+		ok = ok && toss() == 5
+		if !ok {
+			break
+		}
+	}
+	return ok
+}
+
 // search tosses two dice waiting for a double 5. exit on cancel or win
 func search(work *cpb.Work) (uint32, bool) {
 	var theNonce uint32
@@ -102,13 +117,17 @@ func search(work *cpb.Work) (uint32, bool) {
 		// }
 
 		// toss twice
-		a, b := toss(), toss()
-		if a == b && a == 5 { // a win?
+		// a, b := toss(), toss()
+		// if a == b && a == 5 { // a win?
+		// 	theNonce = uint32(cn)
+		// 	ok = true
+		// 	break
+		// }
+		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
 			ok = true
 			break
 		}
-
 		// check for a stop order
 		if gotcancel() {
 			break
@@ -136,6 +155,8 @@ func init() {
 var myID uint32
 
 func main() {
+	flag.Parse()
+
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
