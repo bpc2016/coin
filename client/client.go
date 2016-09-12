@@ -30,7 +30,10 @@ func getWork(c cpb.CoinClient, name string) {
 	if err != nil {
 		log.Fatalf("could not get work: %v", err)
 	}
-	log.Printf("Got work %+v\n", r.Work)
+	if *debug {
+		log.Printf("Got work %+v\n", r.Work)
+	}
+	// in parallel - seek cancellation
 	go getCancel(c, name)
 	// search blocks
 	theNonce, ok := search(r.Work)
