@@ -43,13 +43,14 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var minersIn, run sync.WaitGroup
+var workgate chan struct{}
+var signIn chan string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	fmt.Printf("Work requested: %+v\n", in)
-	minersIn.Done() //Add(-1) // we work downwards from numMiners
-	run.Wait()      // all must wait here
+	signIn <- in.Name // register
+	<-workgate        // all must wait
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -60,13 +61,44 @@ func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
 	return &cpb.Work{Coinbase: name, Block: []byte(block)}
 }
 
+type win struct {
+	who  string
+	data cpb.Win
+}
+
+// Announce responds to a proposed solution : implements cpb.CoinServer
+func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
+	won := vetWin(win{who: "client", data: *soln.Win})
+	return &cpb.AnnounceReply{Ok: won}, nil
+}
+
+// extAnnounce is the analogue of 'Announce'
+func extAnnounce() {
+	select {
+	case <-settled.ch:
+		return
+	case <-time.After(timeOut * time.Second):
+		vetWin(win{who: "outsider", data: cpb.Win{Coinbase: "", Nonce: 0}}) // bogus
+		return
+	}
+}
+
+var signOut chan string
+
+// GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
+func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
+	signOut <- in.Name // register
+	<-endrun           // wait for valid solution  OR timeout
+	return &cpb.GetCancelReply{Ok: true}, nil
+}
+
 var settled struct {
 	sync.Mutex
 	ch chan struct{}
 }
 
 // vetWins handle wins - all are directed here
-func vetWin(thewin cpb.Win) bool {
+func vetWin(thewin win) bool {
 	settled.Lock()
 	defer settled.Unlock()
 	select {
@@ -75,18 +107,11 @@ func vetWin(thewin cpb.Win) bool {
 	default:
 		fmt.Printf("\nWinner is: %+v\n", thewin)
 		close(settled.ch) // until call for new run resets this one
-		for i := 0; i < numMiners; i++ {
-			miner := <-signOut
-			fmt.Printf("[%d] de_register %s\n", i, miner)
-		}
-		stop.Done() // issue cancellations
-		run.Add(1)
-		// endRun()          // SOLE call to endRun
+		endRun()          // SOLE call to endRun
 		return true
 	}
 }
 
-/*
 var endrun chan struct{}
 
 func endRun() {
@@ -101,30 +126,19 @@ func endRun() {
 	fmt.Printf("\nNew race!\n--------------------\n")
 }
 
-
-
-*/
-
-// Announce responds to a proposed solution : implements cpb.CoinServer
-func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	won := vetWin(*soln.Win)
-	return &cpb.AnnounceReply{Ok: won}, nil
-}
-
-// extAnnounce is the analogue of 'Announce'
-func extAnnounce() {
-	// to be filled
-}
-
-var stop sync.WaitGroup
-var signOut chan string
-
-// GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
-func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	signOut <- in.Name // register
-	stop.Wait()        // wait for cancel signal
-	// minersOut <- struct{}{}
-	return &cpb.GetCancelReply{Ok: true}, nil
+func startRun() {
+	for {
+		for i := 0; i < numMiners; i++ {
+			miner := <-signIn
+			fmt.Printf("(%d) registered %s\n", i, miner)
+		}
+		endrun = make(chan struct{})
+		settled.Lock()
+		settled.ch = make(chan struct{})
+		settled.Unlock()
+		close(workgate)  // start our miners
+		go extAnnounce() // start external miners
+	}
 }
 
 // initalise
@@ -133,52 +147,18 @@ func init() {
 	users.nextID = -1
 }
 
-var minersOut chan struct{}
-
-//var cancels chan struct{}
-// cancels = make(chan struct{}, numMiners)
-
 func main() {
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
-	run.Add(1)                                   // updated in vetWin
-	minersIn.Add(numMiners)
+	signIn = make(chan string)
 	signOut = make(chan string)
+	block = fmt.Sprintf("BLOCK: %v", time.Now())
+	workgate = make(chan struct{})
 
-	go func() {
-		for i := 0; i < 30; i++ {
-			settled.Lock()
-			settled.ch = make(chan struct{})
-			settled.Unlock()
-			// toolate = make(chan struct{})
-			// minersOut = make(chan struct{}, numMiners)
-
-			// start the race
-			go func() {
-				minersIn.Wait()         // for a work request
-				minersIn.Add(numMiners) // so that we pause above
-				stop.Add(1)
-				run.Done() // free the miners to start
-			}()
-
-			// handle the win, issue the cancellation
-			// firstWin := <-wins.ch // wait and grab this one
-			//<-toolate   // wait for this to close
-			<-settled.ch
-			// stop.Done() // issue cancellations --- becomes negative ?...
-			// run.Add(1)
-			block = fmt.Sprintf("BLOCK: %v", time.Now()) // new work
-			fmt.Printf("\nNew race!\n--------------------\n")
-			// close(wins.ch) // rather than drain it - no idea how many?
-			// for range minersOut {
-			// 	<-minersOut
-			// }
-		}
-	}()
+	go startRun()
 
 	s := grpc.NewServer()
 	cpb.RegisterCoinServer(s, &server{})
