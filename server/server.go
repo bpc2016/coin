@@ -21,9 +21,6 @@ const (
 
 var numMiners = flag.Int("m", 3, "number of miners")
 
-// server is used to implement cpb.CoinServer.
-type server struct{}
-
 // logger type is for the users login details
 type logger struct {
 	sync.Mutex //anonymous
@@ -123,20 +120,8 @@ func vetWin(thewin win) bool {
 	}
 }
 
-func startRun() {
-	for {
-		for i := 0; i < *numMiners; i++ {
-			miner := <-signIn
-			fmt.Printf("(%d) registered %s\n", i, miner)
-		}
-		endrun = make(chan struct{})
-		settled.Lock()
-		settled.ch = make(chan struct{})
-		settled.Unlock()
-		close(workgate)  // start our miners
-		go extAnnounce() // start external miners
-	}
-}
+// server is used to implement cpb.CoinServer.
+type server struct{}
 
 // initalise
 func init() {
@@ -152,14 +137,29 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
+	s := new(server)
+
 	signIn = make(chan string)
 	signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
 	workgate = make(chan struct{})
 
-	go startRun()
+	go func() {
+		for {
+			for i := 0; i < *numMiners; i++ {
+				miner := <-signIn
+				fmt.Printf("(%d) registered %s\n", i, miner)
+			}
+			endrun = make(chan struct{})
+			settled.Lock()
+			settled.ch = make(chan struct{})
+			settled.Unlock()
+			close(workgate)  // start our miners
+			go extAnnounce() // start external miners
+		}
+	}()
 
-	s := grpc.NewServer()
-	cpb.RegisterCoinServer(s, &server{})
-	s.Serve(lis)
+	g := grpc.NewServer()
+	cpb.RegisterCoinServer(g, s)
+	g.Serve(lis)
 }
