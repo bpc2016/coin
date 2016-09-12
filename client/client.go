@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"os"
 	"time"
 
 	cpb "coin/service"
@@ -15,12 +14,14 @@ import (
 )
 
 const (
-	address     = "localhost:50051"
-	defaultName = "busiso"
+	address = "localhost:50051"
 )
 
-var tosses = flag.Int("t", 2, "number of tosses")
-
+var (
+	debug  = flag.Bool("d", false, "debug mode")
+	tosses = flag.Int("t", 2, "number of tosses")
+	user   = flag.String("u", "busiso", "the client name")
+)
 var waitForCancel chan struct{}
 
 func getWork(c cpb.CoinClient, name string) {
@@ -33,13 +34,6 @@ func getWork(c cpb.CoinClient, name string) {
 	go getCancel(c, name)
 	// search blocks
 	theNonce, ok := search(r.Work)
-
-	// this is just for testing: we are interested in teh case where cancellation
-	// coincides with a win by another miner
-	if ok && gotcancel() {
-		fmt.Printf("CANCELLED  ok=%v, I am (%d)\n", ok, myID)
-	}
-
 	if ok {
 		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 		annouceWin(c, theNonce, r.Work.Coinbase)
@@ -55,7 +49,7 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
 		log.Fatalf("could not announce win: %v", err)
 	}
 	if r.Ok { // it's possible that my winning nonce was late!
-		fmt.Printf("== %d == FOUND it (%d)\n", myID, nonce)
+		fmt.Printf("== %d == FOUND -> %d\n", myID, nonce)
 	}
 }
 
@@ -100,7 +94,9 @@ func search(work *cpb.Work) (uint32, bool) {
 			break
 		}
 		<-tick
-		fmt.Println(myID, " ", cn)
+		if *debug {
+			fmt.Println(myID, " ", cn)
+		}
 	}
 	return theNonce, ok
 }
@@ -133,10 +129,10 @@ func main() {
 	c := cpb.NewCoinClient(conn)
 
 	// Contact the server and print out its response.
-	name := defaultName
-	if len(os.Args) > 1 {
-		name = os.Args[1]
-	}
+	name := *user
+	// if len(os.Args) > 1 {
+	// 	name = os.Args[1]
+	// }
 	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not login: %v", err)
