@@ -90,39 +90,6 @@ func search(work *cpb.Work) (uint32, bool) {
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; ; cn++ {
-
-		// have miners 0, 1 win at the same time when cn ==2
-		//
-		// if myID != 2 && cn == 2 { // CHEAT,
-		// 	theNonce = uint32(cn)
-		// 	ok = true
-		// 	break
-		// }
-
-		// have all miners win when cn == 6
-		//
-		// if cn == 6 { // CHEAT,
-		// 	theNonce = uint32(cn)
-		// 	ok = true
-		// 	break
-		// }
-
-		// coincide with external solution: make this just client
-		// need to run this with tossing turned off
-		//
-		// if myID == 0 && cn == 14 { // CHEAT,
-		// 	theNonce = uint32(cn)
-		// 	ok = true
-		// 	break
-		// }
-
-		// toss twice
-		// a, b := toss(), toss()
-		// if a == b && a == 5 { // a win?
-		// 	theNonce = uint32(cn)
-		// 	ok = true
-		// 	break
-		// }
 		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
 			ok = true
