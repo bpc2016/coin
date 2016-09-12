@@ -47,15 +47,15 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 
 var start sync.WaitGroup // var start chan struct{}
 
-var signIn chan string
+// var signIn chan string
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	if *debug {
 		fmt.Printf("Work requested: %+v\n", in)
 	}
-	signIn <- in.Name // register
-	start.Wait()      //<-start        // all must wait
+	s.signIn <- in.Name // register
+	start.Wait()        //<-start        // all must wait
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
 }
 
@@ -90,12 +90,13 @@ func (s *server) extAnnounce() {
 
 // var runover chan struct{}
 var runover sync.WaitGroup
-var signOut chan string
+
+// var signOut chan string
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	signOut <- in.Name // register
-	runover.Wait()     //<-runover          // wait for valid solution  OR timeout
+	s.signOut <- in.Name // register
+	runover.Wait()       //<-runover          // wait for valid solution  OR timeout
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
@@ -115,7 +116,7 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 		fmt.Printf("Winner is: %+v\n", thewin)
 		close(settled.ch) // until call for new run resets this one
 		for i := 0; i < *numMiners; i++ {
-			<-signOut
+			<-s.signOut
 		}
 		runover.Done() //close(runover) // issue cancellation to our clients
 		start.Add(1)   //start = make(chan struct{})
@@ -128,6 +129,8 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 
 // server is used to implement cpb.CoinServer.
 type server struct {
+	signIn  chan string
+	signOut chan string
 }
 
 // initalise
@@ -146,15 +149,15 @@ func main() {
 
 	s := new(server)
 
-	signIn = make(chan string)
-	signOut = make(chan string)
+	s.signIn = make(chan string)
+	s.signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
 	start.Add(1) //start = make(chan struct{})
 
 	go func() {
 		for {
 			for i := 0; i < *numMiners; i++ {
-				<-signIn
+				<-s.signIn
 			}
 			runover.Add(1) //runover = make(chan struct{})
 			settled.Lock()
