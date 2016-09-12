@@ -3,6 +3,7 @@ package main
 import (
 	cpb "coin/service"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -14,10 +15,12 @@ import (
 )
 
 const (
-	port      = ":50051"
-	numMiners = 30
-	timeOut   = 14
+	port = ":50051"
+	// numMiners = 3
+	timeOut = 14
 )
+
+var numMiners = flag.Int("n", 3, "number of miners")
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
@@ -83,6 +86,7 @@ func extAnnounce() {
 	}
 }
 
+var endrun chan struct{}
 var signOut chan string
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
@@ -107,28 +111,22 @@ func vetWin(thewin win) bool {
 	default:
 		fmt.Printf("\nWinner is: %+v\n", thewin)
 		close(settled.ch) // until call for new run resets this one
-		endRun()          // SOLE call to endRun
+		for i := 0; i < *numMiners; i++ {
+			miner := <-signOut
+			fmt.Printf("[%d] de_register %s\n", i, miner)
+		}
+		close(endrun) // issue cancellation to our clients
+		workgate = make(chan struct{})
+		block = fmt.Sprintf("BLOCK: %v", time.Now())
+
+		fmt.Printf("\nNew race!\n--------------------\n")
 		return true
 	}
 }
 
-var endrun chan struct{}
-
-func endRun() {
-	for i := 0; i < numMiners; i++ {
-		miner := <-signOut
-		fmt.Printf("[%d] de_register %s\n", i, miner)
-	}
-	close(endrun) // issue cancellation to our clients
-	workgate = make(chan struct{})
-	block = fmt.Sprintf("BLOCK: %v", time.Now())
-
-	fmt.Printf("\nNew race!\n--------------------\n")
-}
-
 func startRun() {
 	for {
-		for i := 0; i < numMiners; i++ {
+		for i := 0; i < *numMiners; i++ {
 			miner := <-signIn
 			fmt.Printf("(%d) registered %s\n", i, miner)
 		}
