@@ -13,36 +13,14 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	address = "localhost:50051"
-)
-
 var (
 	debug  = flag.Bool("d", false, "debug mode")
 	tosses = flag.Int("t", 2, "number of tosses")
 	user   = flag.String("u", "busiso", "the client name")
+	port   = flag.String("p", "50051", "server port - will include full URL later")
 )
-var waitForCancel chan struct{}
 
-func getWork(c cpb.CoinClient, name string) {
-	// get ready, get set ... this needs to block
-	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not get work: %v", err)
-	}
-	if *debug {
-		log.Printf("Got work %+v\n", r.Work)
-	}
-	// in parallel - seek cancellation
-	go getCancel(c, name)
-	// search blocks
-	theNonce, ok := search(r.Work)
-	if ok {
-		fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-		annouceWin(c, theNonce, r.Work.Coinbase)
-	}
-	<-waitForCancel
-}
+var waitForCancel chan struct{}
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
@@ -123,19 +101,18 @@ var myID uint32
 func main() {
 	flag.Parse()
 
+	address := "localhost:" + *port
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
+
 	c := cpb.NewCoinClient(conn)
 
-	// Contact the server and print out its response.
 	name := *user
-	// if len(os.Args) > 1 {
-	// 	name = os.Args[1]
-	// }
+	// Contact the server and print out its response.
 	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not login: %v", err)
@@ -144,12 +121,30 @@ func main() {
 
 	myID = r.Id
 
+	// main cycle
 	for {
 		fmt.Printf("Fetching work %s ..\n", name)
+		// get ready, get set ... this needs to block
+		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+		if err != nil {
+			log.Fatalf("could not get work: %v", err)
+		}
+		if *debug {
+			log.Printf("Got work %+v\n", r.Work)
+		}
+		// in parallel - seek cancellation
+		go getCancel(c, name)
+		// search blocks
+		theNonce, ok := search(r.Work)
+		if ok {
+			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+			annouceWin(c, theNonce, r.Work.Coinbase)
+		}
 
-		getWork(c, name) // main work done here
+		<-waitForCancel // final check for a cancellation
 
 		fmt.Printf("-----------------------\n")
 		waitForCancel = make(chan struct{}) // reset channel
 	}
+
 }
