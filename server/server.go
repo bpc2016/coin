@@ -146,7 +146,7 @@ func main() {
 	start.Add(1)
 
 	go func() {
-		for { // this loop flow is controlled by vetWin!
+		for {
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
