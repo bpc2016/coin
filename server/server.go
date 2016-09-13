@@ -146,8 +146,8 @@ func main() {
 	start.Add(1)
 
 	go func() {
-		for {
-			for i := 0; i < *numMiners; i++ {
+		for { // this loop flow is controlled by vetWin!
+			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
 			stop.Add(1)                       // prep channel for getcancels
