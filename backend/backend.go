@@ -41,39 +41,37 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
+type blockdata struct {
+	sync.Mutex
+	data string
+}
+
+var block blockdata
 var start sync.WaitGroup
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	//fmt.Printf("Work request: %+v\n", in)
 	s.signIn <- in.Name // register
 	start.Wait()        // all must wait, start when this is Done()
-	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
-}
-
-var block string
-
-// prepares the candidate block and also provides user specific coibase data
-func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
-	return &cpb.Work{Coinbase: name, Block: []byte(block)}
+	block.Lock()
+	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
+	block.Unlock()
+	return &cpb.GetWorkReply{Work: work}, nil
 }
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	won := s.vetWin(*soln.Win)
+	if won { // declare the winner
+		fmt.Printf("Winner: %+v\n", *soln.Win)
+		for i := 0; i < *numMiners; i++ {
+			<-s.signOut
+		}
+		stop.Done()  // issue cancellation to our clients
+		start.Add(1) // reset start waitgroup
+	}
 	return &cpb.AnnounceReply{Ok: won}, nil
 }
-
-// // extAnnounce is the analogue of 'Announce'
-// func (s *server) extAnnounce(ch chan struct{}) {
-// 	select {
-// 	case <-ch: //s.search.ch:
-// 		return
-// 	case <-time.After(timeOut * time.Second):
-// 		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
-// 		return
-// 	}
-// }
 
 var stop sync.WaitGroup
 
@@ -88,30 +86,39 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 func (s *server) vetWin(thewin cpb.Win) bool {
 	s.search.Lock()
 	defer s.search.Unlock()
+	won := false
 	select {
 	case <-s.search.ch: // closed if already have a winner
-		return false
+		//return false
 	default:
-		fmt.Printf("Winner: %+v\n", thewin)
+		// should vet the solution, return false otherwise!!
+		//
 		close(s.search.ch) // until call for new run resets this one
-		for i := 0; i < *numMiners; i++ {
-			<-s.signOut
-		}
-		stop.Done()  // issue cancellation to our clients
-		start.Add(1) // reset start waitgroup
-		block = fmt.Sprintf("BLOCK: %v", time.Now())
-
-		fmt.Printf("\n--------------------\nNew race!\n")
-		return true
+		won = true         //return true
 	}
+	return won
 }
 
 //=============================================
 
+// this comes from this server's role as a client to frontend
 func askForNew() {
-	fmt.Printf(" ... waiting for frontend\n")
-	time.Sleep(4 * time.Second)
+	time.Sleep(8 * time.Second)
+	block.Lock()
+	block.data = fmt.Sprintf("BLOCK: %v", time.Now())
+	block.Unlock()
 }
+
+// // extAnnounce is the analogue of 'Announce'
+// func (s *server) extAnnounce(ch chan struct{}) {
+// 	select {
+// 	case <-ch: //s.search.ch:
+// 		return
+// 	case <-time.After(timeOut * time.Second):
+// 		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
+// 		return
+// 	}
+// }
 
 //----------------------------------------------------
 
@@ -146,19 +153,20 @@ func main() {
 
 	s.signIn = make(chan string)
 	s.signOut = make(chan string)
-	block = fmt.Sprintf("BLOCK: %v", time.Now())
+	start.Add(1)
 
 	fmt.Printf("Server up on port: %+v\n", port)
 
-	start.Add(1)
-
 	go func() {
 		for {
+			askForNew()
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				si := <-s.signIn
-				fmt.Printf("work request: %+v\n", si)
+				if *debug {
+					fmt.Printf("work request: %+v\n", si)
+				}
 			}
-			askForNew()
+			fmt.Printf("\n--------------------\nNew race!\n")
 			stop.Add(1)                       // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			start.Done()                      // start our miners
