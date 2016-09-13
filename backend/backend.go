@@ -14,11 +14,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	port    = ":50051"
-	timeOut = 14
-)
-
 var (
 	index     = flag.Int("index", 0, "RPC port is 50052+index") //; debug port is 36661+index")
 	numMiners = flag.Int("m", 3, "number of miners + plus controller")
@@ -134,8 +129,8 @@ func init() {
 func main() {
 	flag.Parse()
 
-	// lis, err := net.Listen("tcp", port)
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 50052+*index)) // RPC port // HL
+	port := fmt.Sprintf(":%d", 50052+*index)
+	lis, err := net.Listen("tcp", port) // RPC port // HL
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -145,6 +140,9 @@ func main() {
 	s.signIn = make(chan string)
 	s.signOut = make(chan string)
 	block = fmt.Sprintf("BLOCK: %v", time.Now())
+
+	fmt.Printf("Server up on port: %+v\n", port)
+
 	start.Add(1)
 
 	go func() {
@@ -155,7 +153,6 @@ func main() {
 			stop.Add(1)                       // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			start.Done()                      // start our miners
-			// go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
 
