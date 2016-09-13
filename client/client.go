@@ -23,15 +23,13 @@ var (
 var waitForCancel chan struct{}
 
 // annouceWin is what causes the server to issue a cancellation
-func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) {
+func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if err != nil {
 		log.Fatalf("could not announce win: %v", err)
 	}
-	if r.Ok { // it's possible that my winning nonce was late!
-		fmt.Printf("== %d == FOUND -> %d\n", myID, nonce)
-	}
+	return r.Ok
 }
 
 // getCancel makes a blocking request to the server
@@ -71,24 +69,20 @@ func search(work *cpb.Work) (uint32, bool) {
 			break
 		}
 		// check for a stop order
-		if gotcancel() {
-			break
+		select {
+		case <-waitForCancel:
+			goto done // if so ... break out of this cycle, return (with ok=false!)
+		default: // continue
 		}
+		// wait for a second here ...
 		<-tick
 		if *debug {
 			fmt.Println(myID, " ", cn)
 		}
 	}
-	return theNonce, ok
-}
 
-func gotcancel() bool {
-	select {
-	case <-waitForCancel:
-		return true
-	default:
-		return false
-	}
+done:
+	return theNonce, ok
 }
 
 func init() {
@@ -138,7 +132,10 @@ func main() {
 		theNonce, ok := search(r.Work)
 		if ok {
 			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-			annouceWin(c, theNonce, r.Work.Coinbase)
+			win := annouceWin(c, theNonce, r.Work.Coinbase)
+			if win { // it's possible that my winning nonce was late!
+				fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
+			}
 		}
 
 		<-waitForCancel // final check for a cancellation
