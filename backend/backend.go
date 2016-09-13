@@ -71,16 +71,16 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	return &cpb.AnnounceReply{Ok: won}, nil
 }
 
-// extAnnounce is the analogue of 'Announce'
-func (s *server) extAnnounce(ch chan struct{}) {
-	select {
-	case <-ch: //s.search.ch:
-		return
-	case <-time.After(timeOut * time.Second):
-		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
-		return
-	}
-}
+// // extAnnounce is the analogue of 'Announce'
+// func (s *server) extAnnounce(ch chan struct{}) {
+// 	select {
+// 	case <-ch: //s.search.ch:
+// 		return
+// 	case <-time.After(timeOut * time.Second):
+// 		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
+// 		return
+// 	}
+// }
 
 var stop sync.WaitGroup
 
@@ -155,7 +155,7 @@ func main() {
 			stop.Add(1)                       // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			start.Done()                      // start our miners
-			go s.extAnnounce(s.search.ch)     // start external miners
+			// go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
 
