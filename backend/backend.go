@@ -20,7 +20,8 @@ const (
 )
 
 var (
-	numMiners = flag.Int("m", 3, "number of miners")
+	index     = flag.Int("index", 0, "RPC port is 50052+index") //; debug port is 36661+index")
+	numMiners = flag.Int("m", 3, "number of miners + plus controller")
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
@@ -133,7 +134,8 @@ func init() {
 func main() {
 	flag.Parse()
 
-	lis, err := net.Listen("tcp", port)
+	// lis, err := net.Listen("tcp", port)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", 50052+*index)) // RPC port // HL
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
