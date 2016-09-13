@@ -45,9 +45,7 @@ var start sync.WaitGroup
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	if *debug {
-		fmt.Printf("Work request: %+v\n", in)
-	}
+	//fmt.Printf("Work request: %+v\n", in)
 	s.signIn <- in.Name // register
 	start.Wait()        // all must wait, start when this is Done()
 	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
@@ -108,6 +106,15 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	}
 }
 
+//=============================================
+
+func askForNew() {
+	fmt.Printf(" ... waiting for frontend\n")
+	time.Sleep(4 * time.Second)
+}
+
+//----------------------------------------------------
+
 type winchannel struct {
 	sync.Mutex
 	ch chan struct{}
@@ -148,8 +155,10 @@ func main() {
 	go func() {
 		for {
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
-				<-s.signIn
+				si := <-s.signIn
+				fmt.Printf("work request: %+v\n", si)
 			}
+			askForNew()
 			stop.Add(1)                       // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			start.Done()                      // start our miners
