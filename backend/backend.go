@@ -16,7 +16,7 @@ import (
 
 var (
 	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
-	numMiners = flag.Int("miners", 3, "number of miners")       // includes the external one
+	numMiners = flag.Int("miners", 2, "number of miners")       // DOESNT include the external one
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
@@ -147,6 +147,8 @@ func init() {
 func main() {
 	flag.Parse()
 
+	*numMiners++ // to include the EXTERNAL
+
 	port := fmt.Sprintf(":%d", 50051+*index)
 	lis, err := net.Listen("tcp", port) // RPC port - localhost?
 	if err != nil {
@@ -177,7 +179,7 @@ func main() {
 		}
 	}()
 
-	go getResult() //
+	go getResult() // this is for later server implementation
 
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
