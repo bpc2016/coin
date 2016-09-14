@@ -14,14 +14,10 @@
         if test $# -gt 0; then
                 TOSSES=$1
         fi
-        let COUNTER+=1  # we inrement this
-        until [  $COUNTER -lt 2 ]; do
+        until [  $COUNTER -lt 1 ]; do
                 ./client -t $TOSSES -u $COUNTER  &
                 let COUNTER-=1
         done
-        
-        #  finally, the external client
-        ./client -u EXTERNAL  &
 
         # for i in `seq 1 100`;
         # do
