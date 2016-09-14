@@ -16,7 +16,7 @@ import (
 
 var (
 	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
-	numMiners = flag.Int("m", 3, "number of miners")
+	numMiners = flag.Int("miners", 3, "number of miners")       // includes the external one
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
@@ -123,23 +123,11 @@ var resultchan chan string
 func getResult() {
 	for {
 		result := <-resultchan // wait for a result
-		fmt.Println(result)    // send this back to client
+		fmt.Print(result)      // send this back to client
 		issueBlock()           ///BOGUS - this happens at the frontend in response ..
 	}
 }
 
-/*
-// extAnnounce is the analogue of 'Announce'
-func (s *server) extAnnounce(ch chan struct{}) {
-	select {
-	case <-ch:
-		return
-	case <-time.After(timeOut * time.Second):
-		s.vetWin(cpb.Win{Coinbase: "EXTERNAL", Nonce: 0}) // bogus
-		return
-	}
-}
-*/
 //===========================================================================
 
 // this comes from this server's role as a client to frontend
@@ -186,13 +174,10 @@ func main() {
 			s.stop.Add(1)                     // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			s.start.Done()                    // start our miners
-			// go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
 
 	go getResult() //
-
-	//go extAnnounce()
 
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
