@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"sync"
-	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -108,46 +107,28 @@ type server struct {
 	stop    sync.WaitGroup
 }
 
-//==========================================================================
 var blockchan chan string
 
-// this will implemented by cpb.server
-func issueBlock() {
-	//time.Sleep(8 * time.Second)
-	blockchan <- fmt.Sprintf("BLOCK: %v", time.Now()) // comes from client = frontend
-}
-
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
+	blockchan <- in.Block
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
 var resultchan chan string
 
-// // this will implement dpb.server
-// func getResult() {
-// 	for {
-// 		result := <-resultchan // wait for a result
-// 		fmt.Print(result)      // send this back to client
-// 		issueBlock()           ///BOGUS - this happens at the frontend in response ..
-// 	}
-// }
-
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan // wait for a result
 	fmt.Print(result)      // send this back to client
-	issueBlock()           ///BOGUS - this happens at the frontend in response ..
 	return &cpb.GetResultReply{Solution: result}, nil
 }
 
-//===========================================================================
-
 var haveExternal bool
 
-// this comes from this server's role as a client to frontend
+// this comes from this server's role with frontend as client
 func getNewBlock() {
 	temp := <-blockchan // note that this will block if EXTERNAL absent
 	block.Lock()
-	block.data = temp //= fmt.Sprintf("BLOCK: %v", time.Now())
+	block.data = temp
 	block.Unlock()
 }
 
@@ -177,8 +158,6 @@ func main() {
 	blockchan = make(chan string, 1) // buffered
 	resultchan = make(chan string)   //, 1) // buffered
 
-	issueBlock() ///BOGUS
-
 	go func() {
 		for {
 			getNewBlock()
@@ -191,8 +170,6 @@ func main() {
 			s.start.Done()                    // start our miners
 		}
 	}()
-
-	// go getResult() // this is for later server implementation
 
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)

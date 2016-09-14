@@ -48,7 +48,7 @@ func getResult(c cpb.CoinClient, name string) {
 	if err != nil {
 		log.Fatalf("could not request result: %v", err)
 	}
-	fmt.Printf("RESULT: %v\n", solution)
+	fmt.Printf("%v\n", solution)
 }
 
 // dice
@@ -139,7 +139,10 @@ func main() {
 	for {
 		if *frontend {
 			// we issue the blocks
-
+			newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
+			if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
+				log.Fatalf("could not issue block: %v", err)
+			}
 			// we handle results
 			go getResult(c, name)
 		}
