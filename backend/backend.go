@@ -14,12 +14,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	port    = ":50051"
-	timeOut = 14
-)
-
 var (
+	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
 	numMiners = flag.Int("m", 3, "number of miners")
 	debug     = flag.Bool("d", false, "debug mode")
 )
@@ -71,17 +67,6 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	return &cpb.AnnounceReply{Ok: won}, nil
 }
 
-// extAnnounce is the analogue of 'Announce'
-func (s *server) extAnnounce(ch chan struct{}) {
-	select {
-	case <-ch:
-		return
-	case <-time.After(timeOut * time.Second):
-		s.vetWin(cpb.Win{Coinbase: "EXTERNAL", Nonce: 0}) // bogus
-		return
-	}
-}
-
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	s.signOut <- in.Name // register
@@ -98,7 +83,7 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	case <-s.search.ch: // closed if already have a winner
 	default: // should vet the solution, return false otherwise!!
 		close(s.search.ch) // until call for new run resets this one
-		fmt.Printf("Winner: %+v\n", thewin)
+		resultchan <- fmt.Sprintf("Winner: %+v\n", thewin)
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
@@ -123,10 +108,45 @@ type server struct {
 	stop    sync.WaitGroup
 }
 
+//==========================================================================
+var blockchan chan string
+
+// this will implemented by cpb.server
+func issueBlock() {
+	//time.Sleep(8 * time.Second)
+	blockchan <- fmt.Sprintf("BLOCK: %v", time.Now()) // comes from client = frontend
+}
+
+var resultchan chan string
+
+// this will implement dpb.Client
+func getResult() {
+	for {
+		result := <-resultchan // wait for a result
+		fmt.Println(result)    // send this back to client
+		issueBlock()           ///BOGUS - this happens at the frontend in response ..
+	}
+}
+
+/*
+// extAnnounce is the analogue of 'Announce'
+func (s *server) extAnnounce(ch chan struct{}) {
+	select {
+	case <-ch:
+		return
+	case <-time.After(timeOut * time.Second):
+		s.vetWin(cpb.Win{Coinbase: "EXTERNAL", Nonce: 0}) // bogus
+		return
+	}
+}
+*/
+//===========================================================================
+
 // this comes from this server's role as a client to frontend
 func getNewBlock() {
+	temp := <-blockchan
 	block.Lock()
-	block.data = fmt.Sprintf("BLOCK: %v", time.Now())
+	block.data = temp //= fmt.Sprintf("BLOCK: %v", time.Now())
 	block.Unlock()
 }
 
@@ -139,7 +159,8 @@ func init() {
 func main() {
 	flag.Parse()
 
-	lis, err := net.Listen("tcp", port)
+	port := fmt.Sprintf(":%d", 50051+*index)
+	lis, err := net.Listen("tcp", port) // RPC port - localhost?
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -149,6 +170,11 @@ func main() {
 	s.signIn = make(chan string)
 	s.signOut = make(chan string)
 	s.start.Add(1) // get work start
+
+	blockchan = make(chan string, 1) // buffered
+	resultchan = make(chan string)   //, 1) // buffered
+
+	issueBlock() ///BOGUS
 
 	go func() {
 		for {
@@ -160,9 +186,13 @@ func main() {
 			s.stop.Add(1)                     // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
 			s.start.Done()                    // start our miners
-			go s.extAnnounce(s.search.ch)     // start external miners
+			// go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
+
+	go getResult() //
+
+	//go extAnnounce()
 
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
