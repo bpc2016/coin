@@ -13,10 +13,14 @@ It has these top-level messages:
 	GetWorkRequest
 	AnnounceRequest
 	GetCancelRequest
+	IssueBlockRequest
+	GetResultRequest
 	LoginReply
 	GetWorkReply
 	AnnounceReply
 	GetCancelReply
+	IssueBlockReply
+	GetResultReply
 	Work
 	Win
 */
@@ -89,6 +93,26 @@ func (m *GetCancelRequest) String() string            { return proto.CompactText
 func (*GetCancelRequest) ProtoMessage()               {}
 func (*GetCancelRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
+// IssueBlock requests carries the string block
+type IssueBlockRequest struct {
+	Block string `protobuf:"bytes,1,opt,name=block" json:"block,omitempty"`
+}
+
+func (m *IssueBlockRequest) Reset()                    { *m = IssueBlockRequest{} }
+func (m *IssueBlockRequest) String() string            { return proto.CompactTextString(m) }
+func (*IssueBlockRequest) ProtoMessage()               {}
+func (*IssueBlockRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
+
+// GetResult requests carries the same name as login
+type GetResultRequest struct {
+	Name string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
+}
+
+func (m *GetResultRequest) Reset()                    { *m = GetResultRequest{} }
+func (m *GetResultRequest) String() string            { return proto.CompactTextString(m) }
+func (*GetResultRequest) ProtoMessage()               {}
+func (*GetResultRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
+
 // Login response message containing the assigned id and work
 type LoginReply struct {
 	Id uint32 `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
@@ -97,7 +121,7 @@ type LoginReply struct {
 func (m *LoginReply) Reset()                    { *m = LoginReply{} }
 func (m *LoginReply) String() string            { return proto.CompactTextString(m) }
 func (*LoginReply) ProtoMessage()               {}
-func (*LoginReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
+func (*LoginReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
 
 // GetWork response is a work struct
 type GetWorkReply struct {
@@ -107,7 +131,7 @@ type GetWorkReply struct {
 func (m *GetWorkReply) Reset()                    { *m = GetWorkReply{} }
 func (m *GetWorkReply) String() string            { return proto.CompactTextString(m) }
 func (*GetWorkReply) ProtoMessage()               {}
-func (*GetWorkReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
+func (*GetWorkReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
 
 func (m *GetWorkReply) GetWork() *Work {
 	if m != nil {
@@ -124,7 +148,7 @@ type AnnounceReply struct {
 func (m *AnnounceReply) Reset()                    { *m = AnnounceReply{} }
 func (m *AnnounceReply) String() string            { return proto.CompactTextString(m) }
 func (*AnnounceReply) ProtoMessage()               {}
-func (*AnnounceReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
+func (*AnnounceReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
 
 // GetCancel response is boolean
 type GetCancelReply struct {
@@ -134,7 +158,27 @@ type GetCancelReply struct {
 func (m *GetCancelReply) Reset()                    { *m = GetCancelReply{} }
 func (m *GetCancelReply) String() string            { return proto.CompactTextString(m) }
 func (*GetCancelReply) ProtoMessage()               {}
-func (*GetCancelReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
+func (*GetCancelReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{9} }
+
+// IssueBlock response is boolean
+type IssueBlockReply struct {
+	Ok bool `protobuf:"varint,1,opt,name=ok" json:"ok,omitempty"`
+}
+
+func (m *IssueBlockReply) Reset()                    { *m = IssueBlockReply{} }
+func (m *IssueBlockReply) String() string            { return proto.CompactTextString(m) }
+func (*IssueBlockReply) ProtoMessage()               {}
+func (*IssueBlockReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{10} }
+
+// GetResult response is string
+type GetResultReply struct {
+	Solution string `protobuf:"bytes,1,opt,name=solution" json:"solution,omitempty"`
+}
+
+func (m *GetResultReply) Reset()                    { *m = GetResultReply{} }
+func (m *GetResultReply) String() string            { return proto.CompactTextString(m) }
+func (*GetResultReply) ProtoMessage()               {}
+func (*GetResultReply) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{11} }
 
 type Work struct {
 	Coinbase string `protobuf:"bytes,1,opt,name=coinbase" json:"coinbase,omitempty"`
@@ -144,7 +188,7 @@ type Work struct {
 func (m *Work) Reset()                    { *m = Work{} }
 func (m *Work) String() string            { return proto.CompactTextString(m) }
 func (*Work) ProtoMessage()               {}
-func (*Work) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
+func (*Work) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{12} }
 
 type Win struct {
 	Coinbase string `protobuf:"bytes,1,opt,name=coinbase" json:"coinbase,omitempty"`
@@ -154,17 +198,21 @@ type Win struct {
 func (m *Win) Reset()                    { *m = Win{} }
 func (m *Win) String() string            { return proto.CompactTextString(m) }
 func (*Win) ProtoMessage()               {}
-func (*Win) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{9} }
+func (*Win) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{13} }
 
 func init() {
 	proto.RegisterType((*LoginRequest)(nil), "cpb.LoginRequest")
 	proto.RegisterType((*GetWorkRequest)(nil), "cpb.GetWorkRequest")
 	proto.RegisterType((*AnnounceRequest)(nil), "cpb.AnnounceRequest")
 	proto.RegisterType((*GetCancelRequest)(nil), "cpb.GetCancelRequest")
+	proto.RegisterType((*IssueBlockRequest)(nil), "cpb.IssueBlockRequest")
+	proto.RegisterType((*GetResultRequest)(nil), "cpb.GetResultRequest")
 	proto.RegisterType((*LoginReply)(nil), "cpb.LoginReply")
 	proto.RegisterType((*GetWorkReply)(nil), "cpb.GetWorkReply")
 	proto.RegisterType((*AnnounceReply)(nil), "cpb.AnnounceReply")
 	proto.RegisterType((*GetCancelReply)(nil), "cpb.GetCancelReply")
+	proto.RegisterType((*IssueBlockReply)(nil), "cpb.IssueBlockReply")
+	proto.RegisterType((*GetResultReply)(nil), "cpb.GetResultReply")
 	proto.RegisterType((*Work)(nil), "cpb.Work")
 	proto.RegisterType((*Win)(nil), "cpb.Win")
 }
@@ -188,6 +236,10 @@ type CoinClient interface {
 	Announce(ctx context.Context, in *AnnounceRequest, opts ...grpc.CallOption) (*AnnounceReply, error)
 	// GetCancel is a request for a cancellation of search
 	GetCancel(ctx context.Context, in *GetCancelRequest, opts ...grpc.CallOption) (*GetCancelReply, error)
+	// IssueBlock is an offer of search block data
+	IssueBlock(ctx context.Context, in *IssueBlockRequest, opts ...grpc.CallOption) (*IssueBlockReply, error)
+	// GetResult is a  request for a solution
+	GetResult(ctx context.Context, in *GetResultRequest, opts ...grpc.CallOption) (*GetResultReply, error)
 }
 
 type coinClient struct {
@@ -234,6 +286,24 @@ func (c *coinClient) GetCancel(ctx context.Context, in *GetCancelRequest, opts .
 	return out, nil
 }
 
+func (c *coinClient) IssueBlock(ctx context.Context, in *IssueBlockRequest, opts ...grpc.CallOption) (*IssueBlockReply, error) {
+	out := new(IssueBlockReply)
+	err := grpc.Invoke(ctx, "/cpb.Coin/IssueBlock", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coinClient) GetResult(ctx context.Context, in *GetResultRequest, opts ...grpc.CallOption) (*GetResultReply, error) {
+	out := new(GetResultReply)
+	err := grpc.Invoke(ctx, "/cpb.Coin/GetResult", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Coin service
 
 type CoinServer interface {
@@ -245,6 +315,10 @@ type CoinServer interface {
 	Announce(context.Context, *AnnounceRequest) (*AnnounceReply, error)
 	// GetCancel is a request for a cancellation of search
 	GetCancel(context.Context, *GetCancelRequest) (*GetCancelReply, error)
+	// IssueBlock is an offer of search block data
+	IssueBlock(context.Context, *IssueBlockRequest) (*IssueBlockReply, error)
+	// GetResult is a  request for a solution
+	GetResult(context.Context, *GetResultRequest) (*GetResultReply, error)
 }
 
 func RegisterCoinServer(s *grpc.Server, srv CoinServer) {
@@ -323,6 +397,42 @@ func _Coin_GetCancel_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Coin_IssueBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IssueBlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoinServer).IssueBlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cpb.Coin/IssueBlock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoinServer).IssueBlock(ctx, req.(*IssueBlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Coin_GetResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoinServer).GetResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cpb.Coin/GetResult",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoinServer).GetResult(ctx, req.(*GetResultRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Coin_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cpb.Coin",
 	HandlerType: (*CoinServer)(nil),
@@ -343,6 +453,14 @@ var _Coin_serviceDesc = grpc.ServiceDesc{
 			MethodName: "GetCancel",
 			Handler:    _Coin_GetCancel_Handler,
 		},
+		{
+			MethodName: "IssueBlock",
+			Handler:    _Coin_IssueBlock_Handler,
+		},
+		{
+			MethodName: "GetResult",
+			Handler:    _Coin_GetResult_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: fileDescriptor0,
@@ -351,27 +469,31 @@ var _Coin_serviceDesc = grpc.ServiceDesc{
 func init() { proto.RegisterFile("coin.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 337 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x84, 0x52, 0x4f, 0x4f, 0xfa, 0x40,
-	0x10, 0xfd, 0xb5, 0x94, 0x9f, 0x65, 0xe4, 0x8f, 0x0c, 0x98, 0x90, 0x46, 0x23, 0xd9, 0x18, 0xc3,
-	0x05, 0x0e, 0x90, 0xf8, 0xe7, 0x68, 0x38, 0x70, 0xf1, 0xb4, 0x17, 0xce, 0x74, 0xd9, 0x98, 0x4d,
-	0xeb, 0x6c, 0x85, 0x12, 0xc2, 0x87, 0xf5, 0xbb, 0x98, 0x4e, 0x5b, 0x04, 0x62, 0xf0, 0xd6, 0x79,
-	0xf3, 0xde, 0xec, 0x9b, 0x37, 0x05, 0x50, 0xd6, 0xd0, 0x28, 0x59, 0xd9, 0xd4, 0x62, 0x45, 0x25,
-	0xa1, 0x10, 0x50, 0x7f, 0xb3, 0xef, 0x86, 0xa4, 0xfe, 0xdc, 0xe8, 0x75, 0x8a, 0x08, 0x1e, 0x2d,
-	0x3e, 0x74, 0xcf, 0xe9, 0x3b, 0x83, 0x9a, 0xe4, 0x6f, 0x71, 0x0f, 0xcd, 0x99, 0x4e, 0xe7, 0x76,
-	0x15, 0x9d, 0x63, 0x0d, 0xa1, 0xf5, 0x4a, 0x64, 0x37, 0xa4, 0x74, 0x49, 0x0b, 0xa0, 0xb2, 0x35,
-	0xc4, 0xac, 0xcb, 0xb1, 0x3f, 0x52, 0x49, 0x38, 0x9a, 0x1b, 0x92, 0x19, 0x28, 0x1e, 0xe0, 0x6a,
-	0xa6, 0xd3, 0xe9, 0x82, 0x94, 0x8e, 0xcf, 0x8d, 0xbd, 0x01, 0x28, 0x0c, 0x26, 0xf1, 0x0e, 0x9b,
-	0xe0, 0x9a, 0x25, 0xf7, 0x1b, 0xd2, 0x35, 0x4b, 0x31, 0x84, 0xfa, 0xde, 0x5a, 0xd6, 0xbf, 0x05,
-	0x6f, 0x6b, 0x57, 0x51, 0xf1, 0x64, 0x2d, 0x7f, 0x32, 0xeb, 0x32, 0x2c, 0xee, 0xa0, 0xf1, 0xe3,
-	0xb1, 0x98, 0x67, 0x73, 0xb6, 0x2f, 0x5d, 0x1b, 0x89, 0x3e, 0xaf, 0x5a, 0xba, 0xfa, 0x8d, 0xf1,
-	0x0c, 0x5e, 0x36, 0x10, 0x03, 0xf0, 0xb3, 0x2c, 0xc3, 0xc5, 0xba, 0xf4, 0xbb, 0xaf, 0xb1, 0x0b,
-	0xd5, 0x30, 0xb6, 0x2a, 0xea, 0xb9, 0x7d, 0x67, 0x50, 0x97, 0x79, 0x21, 0x9e, 0xa0, 0x32, 0x37,
-	0xf4, 0x97, 0x90, 0x2c, 0x29, 0xcd, 0xc2, 0x86, 0xcc, 0x8b, 0xf1, 0x97, 0x03, 0xde, 0xd4, 0x1a,
-	0xc2, 0x21, 0x54, 0x39, 0x0b, 0x6c, 0xf3, 0x62, 0x87, 0x87, 0x0b, 0x5a, 0x87, 0x50, 0x12, 0xef,
-	0xc4, 0x3f, 0x9c, 0xc0, 0x45, 0x11, 0x0e, 0x76, 0xb8, 0x7b, 0x7c, 0xc5, 0xa0, 0x7d, 0x0c, 0xe6,
-	0xa2, 0x47, 0xf0, 0xcb, 0x88, 0xb0, 0xcb, 0x84, 0x93, 0xab, 0x06, 0x78, 0x82, 0xe6, 0xba, 0x17,
-	0xa8, 0xed, 0x93, 0xc3, 0xeb, 0x72, 0xf2, 0xd1, 0x7d, 0x83, 0xce, 0x29, 0xcc, 0xd2, 0xf0, 0x3f,
-	0xff, 0x8f, 0x93, 0xef, 0x00, 0x00, 0x00, 0xff, 0xff, 0x85, 0xea, 0x05, 0x3a, 0x9d, 0x02, 0x00,
-	0x00,
+	// 413 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x84, 0x53, 0x4d, 0x4f, 0xc2, 0x40,
+	0x10, 0x85, 0x52, 0xb4, 0x8c, 0x7c, 0xc8, 0x82, 0xc6, 0x34, 0x1a, 0x71, 0x63, 0x0c, 0x26, 0xc2,
+	0x01, 0x12, 0x3f, 0x12, 0x2f, 0xca, 0x81, 0x98, 0x78, 0xea, 0x85, 0x33, 0x2d, 0x1b, 0xb3, 0xa1,
+	0xee, 0x56, 0xda, 0x86, 0xf0, 0x47, 0xfd, 0x3d, 0x66, 0x77, 0xbb, 0xfd, 0x00, 0x82, 0xb7, 0xce,
+	0x9b, 0x37, 0x33, 0x7d, 0x6f, 0x66, 0x01, 0x3c, 0x4e, 0xd9, 0x30, 0x58, 0xf1, 0x88, 0xa3, 0x8a,
+	0x17, 0xb8, 0x18, 0x43, 0xfd, 0x93, 0x7f, 0x51, 0xe6, 0x90, 0x9f, 0x98, 0x84, 0x11, 0x42, 0x60,
+	0xb2, 0xf9, 0x37, 0xb9, 0x28, 0xf7, 0xca, 0xfd, 0x9a, 0x23, 0xbf, 0xf1, 0x2d, 0x34, 0xa7, 0x24,
+	0x9a, 0xf1, 0xd5, 0xf2, 0x10, 0x6b, 0x00, 0xad, 0x37, 0xc6, 0x78, 0xcc, 0x3c, 0xa2, 0x69, 0x36,
+	0x54, 0xd6, 0x94, 0x49, 0xd6, 0xc9, 0xc8, 0x1a, 0x7a, 0x81, 0x3b, 0x9c, 0x51, 0xe6, 0x08, 0x10,
+	0xdf, 0xc1, 0xe9, 0x94, 0x44, 0x93, 0x39, 0xf3, 0x88, 0x7f, 0xa8, 0xed, 0x3d, 0xb4, 0x3f, 0xc2,
+	0x30, 0x26, 0xef, 0x3e, 0xf7, 0xd2, 0xf9, 0x5d, 0xa8, 0xba, 0x22, 0x4e, 0x98, 0x2a, 0x48, 0x5a,
+	0x3a, 0x24, 0x8c, 0xfd, 0xe8, 0x50, 0xcb, 0x4b, 0x80, 0x44, 0x73, 0xe0, 0x6f, 0x50, 0x13, 0x0c,
+	0xba, 0x90, 0xf9, 0x86, 0x63, 0xd0, 0x05, 0x1e, 0x40, 0x3d, 0x55, 0x2b, 0xf2, 0x57, 0x60, 0xae,
+	0xf9, 0x6a, 0x99, 0xa8, 0xa8, 0x29, 0x15, 0x22, 0x2b, 0x61, 0x7c, 0x0d, 0x8d, 0x4c, 0x76, 0xd2,
+	0x8f, 0x2b, 0xb6, 0xe5, 0x18, 0x7c, 0x89, 0x7b, 0xd2, 0x3d, 0x2d, 0x74, 0x1f, 0xe3, 0x06, 0x5a,
+	0x79, 0x89, 0xfb, 0x28, 0x0f, 0xb2, 0x89, 0x96, 0x26, 0x18, 0x36, 0x58, 0x21, 0xf7, 0xe3, 0x88,
+	0x72, 0x96, 0x88, 0x4b, 0x63, 0xfc, 0x0c, 0xa6, 0xf8, 0x43, 0xc1, 0x11, 0xfb, 0x76, 0xe7, 0xa1,
+	0x36, 0x20, 0x8d, 0x33, 0x0b, 0x8d, 0x5e, 0xb9, 0x5f, 0xd7, 0x16, 0x3e, 0x41, 0x65, 0x46, 0xd9,
+	0x7f, 0x85, 0x8c, 0x33, 0x8f, 0xc8, 0xc2, 0x86, 0xa3, 0x82, 0xd1, 0xaf, 0x01, 0xe6, 0x84, 0x53,
+	0x86, 0x06, 0x50, 0x95, 0xe6, 0xa2, 0xb6, 0x74, 0x2a, 0x7f, 0x5c, 0x76, 0x2b, 0x0f, 0x05, 0xfe,
+	0x06, 0x97, 0xd0, 0x18, 0x8e, 0x13, 0xb7, 0x51, 0x47, 0x66, 0x8b, 0x97, 0x66, 0xb7, 0x8b, 0xa0,
+	0x2a, 0x7a, 0x04, 0x4b, 0x7b, 0x8e, 0xba, 0x92, 0xb0, 0x75, 0x79, 0x36, 0xda, 0x42, 0x55, 0xdd,
+	0x0b, 0xd4, 0xd2, 0x55, 0xa0, 0x33, 0xdd, 0xb9, 0x70, 0x83, 0x76, 0x67, 0x1b, 0x56, 0xa5, 0xaf,
+	0x00, 0xd9, 0x8e, 0xd0, 0xb9, 0x24, 0xed, 0xdc, 0xa5, 0xdd, 0xdd, 0xc1, 0xf3, 0x83, 0xd5, 0xfa,
+	0xb2, 0xc1, 0x85, 0x4b, 0xcd, 0x06, 0xe7, 0xb6, 0x8c, 0x4b, 0xee, 0x91, 0x7c, 0xac, 0xe3, 0xbf,
+	0x00, 0x00, 0x00, 0xff, 0xff, 0x9e, 0xc9, 0xd5, 0xc5, 0xba, 0x03, 0x00, 0x00,
 }

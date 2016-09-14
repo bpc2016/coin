@@ -42,6 +42,15 @@ func getCancel(c cpb.CoinClient, name string) {
 	close(waitForCancel) // assume that we got an ok=true
 }
 
+// getResult makes a blocking request to the server
+func getResult(c cpb.CoinClient, name string) {
+	solution, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not request result: %v", err)
+	}
+	fmt.Printf("RESULT: %v\n", solution)
+}
+
 // dice
 func toss() int {
 	return rand.Intn(6)
@@ -128,6 +137,12 @@ func main() {
 
 	// main cycle
 	for {
+		if *frontend {
+			// we issue the blocks
+
+			// we handle results
+			go getResult(c, name)
+		}
 		fmt.Printf("Fetching work %s ..\n", name)
 		// get ready, get set ... this needs to block
 		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})

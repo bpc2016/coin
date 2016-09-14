@@ -9,12 +9,21 @@ package cpb;  // coin proto buffer
 service Coin {
   // very first message client -> server requests login details
   rpc Login (LoginRequest) returns (LoginReply) {}
+  
   // GetWork is a request to start mining
   rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
+  
   // Announce is a request to accept a win discovery
   rpc Announce (AnnounceRequest) returns (AnnounceReply) {}
+  
   // GetCancel is a request for a cancellation of search
   rpc GetCancel (GetCancelRequest) returns (GetCancelReply) {}
+  
+  // IssueBlock is an offer of search block data
+  rpc IssueBlock (IssueBlockRequest) returns (IssueBlockReply) {}
+
+  // GetResult is a  request for a solution
+  rpc GetResult (GetResultRequest) returns (GetResultReply) {}
 }
 
 // The Login request message containing the user's name.
@@ -37,6 +46,16 @@ message GetCancelRequest {
   string name = 1;
 }
 
+// IssueBlock requests carries the string block
+message IssueBlockRequest {
+  string block = 1;
+}
+
+// GetResult requests carries the same name as login
+message GetResultRequest {
+  string name = 1;
+}
+
 // Login response message containing the assigned id and work
 message LoginReply {
   uint32 id = 1;
@@ -55,6 +74,16 @@ message AnnounceReply {
 // GetCancel response is boolean
 message GetCancelReply {
   bool ok = 1;
+}
+
+// IssueBlock response is boolean
+message IssueBlockReply {
+  bool ok = 1;
+}
+
+// GetResult response is string
+message GetResultReply {
+  string solution = 1;
 }
 
 message Work {
