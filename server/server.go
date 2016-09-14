@@ -45,7 +45,12 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-var start sync.WaitGroup
+type blockdata struct {
+	sync.Mutex
+	data string
+}
+
+var block blockdata // models teh block information - basis of 'work'
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
@@ -53,15 +58,11 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 		fmt.Printf("Work request: %+v\n", in)
 	}
 	s.signIn <- in.Name // register
-	start.Wait()        // all must wait, start when this is Done()
-	return &cpb.GetWorkReply{Work: fetchWork(in.Name)}, nil
-}
-
-var block string
-
-// prepares the candidate block and also provides user specific coibase data
-func fetchWork(name string) *cpb.Work { // TODO -this should return err as well
-	return &cpb.Work{Coinbase: name, Block: []byte(block)}
+	s.start.Wait()      // all must wait, start when this is Done()
+	block.Lock()
+	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
+	block.Unlock()
+	return &cpb.GetWorkReply{Work: work}, nil
 }
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
@@ -73,20 +74,18 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 // extAnnounce is the analogue of 'Announce'
 func (s *server) extAnnounce(ch chan struct{}) {
 	select {
-	case <-ch: //s.search.ch:
+	case <-ch:
 		return
 	case <-time.After(timeOut * time.Second):
-		s.vetWin(cpb.Win{Coinbase: "external", Nonce: 0}) // bogus
+		s.vetWin(cpb.Win{Coinbase: "EXTERNAL", Nonce: 0}) // bogus
 		return
 	}
 }
 
-var stop sync.WaitGroup
-
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	s.signOut <- in.Name // register
-	stop.Wait()          // wait for valid solution  OR timeout
+	s.stop.Wait()        // wait for valid solution  OR timeout
 	return &cpb.GetCancelReply{Ok: true}, nil
 }
 
@@ -94,34 +93,41 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 func (s *server) vetWin(thewin cpb.Win) bool {
 	s.search.Lock()
 	defer s.search.Unlock()
+	won := false
 	select {
 	case <-s.search.ch: // closed if already have a winner
-		return false
-	default:
-		fmt.Printf("Winner: %+v\n", thewin)
+	default: // should vet the solution, return false otherwise!!
 		close(s.search.ch) // until call for new run resets this one
+		fmt.Printf("Winner: %+v\n", thewin)
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
-		stop.Done()  // issue cancellation to our clients
-		start.Add(1) // reset start waitgroup
-		block = fmt.Sprintf("BLOCK: %v", time.Now())
-
-		fmt.Printf("\n--------------------\nNew race!\n")
-		return true
+		s.stop.Done()  // issue cancellation to our clients
+		s.start.Add(1) // reset getwork start
+		won = true
 	}
+	return won
 }
 
-type winchannel struct {
+type privchannel struct {
 	sync.Mutex
 	ch chan struct{}
 }
 
 // server is used to implement cpb.CoinServer.
 type server struct {
-	signIn  chan string // for registering users in getwork
-	signOut chan string // for registering leaving users in getcancel
-	search  winchannel  // search.ch is closed when we have dclared a winner
+	signIn  chan string    // for registering users in getwork
+	signOut chan string    // for registering leaving users in getcancel
+	search  privchannel    // search.ch is closed when we have dclared a winner
+	start   sync.WaitGroup // this is the tricky one, stop here for company
+	stop    sync.WaitGroup
+}
+
+// this comes from this server's role as a client to frontend
+func getNewBlock() {
+	block.Lock()
+	block.data = fmt.Sprintf("BLOCK: %v", time.Now())
+	block.Unlock()
 }
 
 // initalise
@@ -142,17 +148,18 @@ func main() {
 
 	s.signIn = make(chan string)
 	s.signOut = make(chan string)
-	block = fmt.Sprintf("BLOCK: %v", time.Now())
-	start.Add(1)
+	s.start.Add(1) // get work start
 
 	go func() {
 		for {
+			getNewBlock()
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
-			stop.Add(1)                       // prep channel for getcancels
+			fmt.Printf("\n--------------------\nNew race!\n")
+			s.stop.Add(1)                     // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
-			start.Done()                      // start our miners
+			s.start.Done()                    // start our miners
 			go s.extAnnounce(s.search.ch)     // start external miners
 		}
 	}()
