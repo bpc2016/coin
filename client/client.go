@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	debug  = flag.Bool("d", false, "debug mode")
-	tosses = flag.Int("t", 2, "number of tosses")
-	user   = flag.String("u", "busiso", "the client name")
-	port   = flag.String("p", "50051", "server port - will include full URL later")
+	debug   = flag.Bool("d", false, "debug mode")
+	tosses  = flag.Int("t", 2, "number of tosses")
+	user    = flag.String("u", "EXTERNAL", "the client name")
+	port    = flag.String("p", "50051", "server port - will include full URL later")
+	timeOut = flag.Int("o", 14, "timeout for EXTERNAL")
 )
 
 var waitForCancel chan struct{}
@@ -46,7 +47,13 @@ func toss() int {
 }
 
 // rools returns true if n tosses are all 5's
-func rolls(n int) bool {
+func rolls(n int, cn int) bool {
+	if *user == "EXTERNAL" {
+		if cn < *timeOut {
+			return false
+		}
+		return true
+	}
 	ok := true
 	for i := 0; i < n; i++ {
 		ok = ok && toss() == 5
@@ -63,7 +70,7 @@ func search(work *cpb.Work) (uint32, bool) {
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; ; cn++ {
-		if rolls(*tosses) { // a win?
+		if rolls(*tosses, cn) { // a win?
 			theNonce = uint32(cn)
 			ok = true
 			break
