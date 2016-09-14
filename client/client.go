@@ -14,11 +14,12 @@ import (
 )
 
 var (
-	debug   = flag.Bool("d", false, "debug mode")
-	tosses  = flag.Int("t", 2, "number of tosses")
-	user    = flag.String("u", "EXTERNAL", "the client name")
-	port    = flag.String("p", "50051", "server port - will include full URL later")
-	timeOut = flag.Int("o", 14, "timeout for EXTERNAL")
+	frontend = flag.Bool("frontend", false, "if true - has superpowers")
+	debug    = flag.Bool("d", false, "debug mode")
+	tosses   = flag.Int("t", 2, "number of tosses")
+	user     = flag.String("u", "EXTERNAL", "the client name")
+	port     = flag.String("p", "50051", "server port - will include full URL later")
+	timeOut  = flag.Int("o", 14, "timeout for EXTERNAL")
 )
 
 var waitForCancel chan struct{}
@@ -102,6 +103,9 @@ var myID uint32
 func main() {
 	flag.Parse()
 
+	if *frontend {
+		*user = "EXTERNAL" // appears as EXTERNAL to servers
+	}
 	address := "localhost:" + *port
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
