@@ -78,10 +78,6 @@ done:
 	return theNonce, ok
 }
 
-// func init() {
-// 	rand.Seed(time.Now().UTC().UnixNano())
-// }
-
 var myID uint32
 
 func main() {
@@ -126,7 +122,7 @@ func main() {
 		}
 		look := make(chan struct{}, 1) // for search
 		quit := make(chan struct{}, 1) // for this loop
-		// in parallel - seek cancellation
+		// look out for  cancellation
 		go getCancel(c, name, look, quit)
 		// search blocks
 		theNonce, ok := search(r.Work, look)
