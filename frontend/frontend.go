@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"time"
 
 	cpb "coin/service"
@@ -15,11 +14,9 @@ import (
 
 var (
 	debug   = flag.Bool("d", false, "debug mode")
-	port    = flag.String("p", "50051", "server port - will include full URL later")
+	server  = flag.Int("s", 0, "server is 50051+s - will include full URL later")
 	timeOut = flag.Int("o", 14, "timeout for EXTERNAL")
 )
-
-var waitForCancel chan struct{}
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
@@ -32,13 +29,16 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 }
 
 // getCancel makes a blocking request to the server
-func getCancel(c cpb.CoinClient, name string) {
+func getCancel(c cpb.CoinClient, name string, look chan struct{}, quit chan struct{}) {
 	res, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
-	fmt.Printf("cancel from server %+v\n", res.Index)
-	close(waitForCancel) // assume that we got an ok=true
+	if *debug {
+		fmt.Printf("cancel from server %+v\n", res.Index)
+	}
+	look <- struct{}{} // stop search
+	quit <- struct{}{} // quit loop
 }
 
 // getResult makes a blocking request to the server
@@ -50,8 +50,8 @@ func getResult(c cpb.CoinClient, name string) {
 	fmt.Printf("%v\n", res.Solution)
 }
 
-// search tosses two dice waiting for a double 5. exit on cancel or win
-func search(work *cpb.Work) (uint32, bool) {
+// search here models external net: timeout after timeOut seconds
+func search(work *cpb.Work, look chan struct{}) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
@@ -63,7 +63,7 @@ func search(work *cpb.Work) (uint32, bool) {
 		}
 		// check for a stop order
 		select {
-		case <-waitForCancel:
+		case <-look:
 			goto done // if so ... break out of this cycle, return (with ok=false!)
 		default: // continue
 		}
@@ -78,17 +78,16 @@ done:
 	return theNonce, ok
 }
 
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-	waitForCancel = make(chan struct{})
-}
+// func init() {
+// 	rand.Seed(time.Now().UTC().UnixNano())
+// }
 
 var myID uint32
 
 func main() {
 	flag.Parse()
 
-	address := "localhost:" + *port
+	address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
@@ -110,27 +109,27 @@ func main() {
 
 	// main cycle
 	for {
-		// we issue the blocks
+		// frontend issues the blocks
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
 		if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
 			log.Fatalf("could not issue block: %v", err)
 		}
-		// we handle results
+		// frontend handles results
 		go getResult(c, name)
-
-		//fmt.Printf("Fetching work %s ..\n", name)
 		// get ready, get set ... this needs to block
 		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 		if err != nil {
 			log.Fatalf("could not get work: %v", err)
 		}
 		if *debug {
-			log.Printf("Got work %+v\n", r.Work)
+			log.Printf("...\n")
 		}
+		look := make(chan struct{}, 1) // for search
+		quit := make(chan struct{}, 1) // for this loop
 		// in parallel - seek cancellation
-		go getCancel(c, name)
+		go getCancel(c, name, look, quit)
 		// search blocks
-		theNonce, ok := search(r.Work)
+		theNonce, ok := search(r.Work, look)
 		if ok {
 			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 			win := annouceWin(c, theNonce, r.Work.Coinbase)
@@ -139,10 +138,9 @@ func main() {
 			}
 		}
 
-		<-waitForCancel // final check for a cancellation
+		<-quit // wait for cancellation from server
 
 		fmt.Printf("-----------------------\n")
-		waitForCancel = make(chan struct{}) // reset channel
 	}
 
 }
