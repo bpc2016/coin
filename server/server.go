@@ -82,8 +82,8 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	select {
 	case <-s.search.ch: // closed if already have a winner
 	default: // should vet the solution, return false otherwise!!
-		close(s.search.ch) // until call for new run resets this one
-		resultchan <- fmt.Sprintf("Winner: %+v", thewin)
+		close(s.search.ch)   // until call for new run resets this one
+		resultchan <- thewin // fmt.Sprintf("Winner: %+v", thewin)
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
@@ -124,13 +124,13 @@ func getNewBlock() {
 	block.Unlock()
 }
 
-var resultchan chan string
+var resultchan chan cpb.Win //string
 
 // GetResult sends back win to frontend : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
-	result := <-resultchan // wait for a result
-	fmt.Print(result)      // send this back to client
-	return &cpb.GetResultReply{Solution: result}, nil
+	result := <-resultchan                   // wait for a result
+	fmt.Printf("getresult gets: %v", result) // send this back to client
+	return &cpb.GetResultReply{Winner: &result}, nil
 }
 
 // initalise
@@ -157,7 +157,7 @@ func main() {
 	s.start.Add(1) // get work start
 
 	blockchan = make(chan string, 1) // buffered
-	resultchan = make(chan string)   //, 1) // buffered
+	resultchan = make(chan cpb.Win)  //, 1) // buffered
 
 	go func() {
 		for {
