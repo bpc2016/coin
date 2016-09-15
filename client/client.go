@@ -48,7 +48,7 @@ func getResult(c cpb.CoinClient, name string) {
 	if err != nil {
 		log.Fatalf("could not request result: %v", err)
 	}
-	fmt.Printf("%v\n", solution)
+	fmt.Printf("%v", solution)
 }
 
 // dice
