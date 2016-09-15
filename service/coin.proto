@@ -83,7 +83,7 @@ message IssueBlockReply {
 
 // GetResult response is string
 message GetResultReply {
-  string solution = 1;
+  Win winner = 1;
 }
 
 message Work {
