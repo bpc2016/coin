@@ -82,7 +82,7 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 	case <-s.search.ch: // closed if already have a winner
 	default: // should vet the solution, return false otherwise!!
 		close(s.search.ch) // until call for new run resets this one
-		resultchan <- fmt.Sprintf("Winner: %+v\n", thewin)
+		resultchan <- fmt.Sprintf("Winner: %+v", thewin)
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
@@ -109,20 +109,11 @@ type server struct {
 
 var blockchan chan string
 
+// IssueBlock receives the new block from frontend : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- in.Block
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
-
-var resultchan chan string
-
-func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
-	result := <-resultchan // wait for a result
-	fmt.Print(result)      // send this back to client
-	return &cpb.GetResultReply{Solution: result}, nil
-}
-
-var haveExternal bool
 
 // this comes from this server's role with frontend as client
 func getNewBlock() {
@@ -130,6 +121,15 @@ func getNewBlock() {
 	block.Lock()
 	block.data = temp
 	block.Unlock()
+}
+
+var resultchan chan string
+
+// GetResult sends back win to frontend : implements cpb.CoinServer
+func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
+	result := <-resultchan // wait for a result
+	fmt.Print(result)      // send this back to client
+	return &cpb.GetResultReply{Solution: result}, nil
 }
 
 // initalise
