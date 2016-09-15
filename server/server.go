@@ -70,7 +70,8 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	s.signOut <- in.Name // register
 	s.stop.Wait()        // wait for valid solution  OR timeout
-	return &cpb.GetCancelReply{Ok: true}, nil
+	serv := *index
+	return &cpb.GetCancelReply{Index: uint32(serv)}, nil
 }
 
 // vetWins handles wins - all are directed here

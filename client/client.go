@@ -37,7 +37,7 @@ func getCancel(c cpb.CoinClient, name string) {
 	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
-	close(waitForCancel) // assume that we got an ok=true
+	close(waitForCancel) // we dont really care what server sent this
 }
 
 // dice

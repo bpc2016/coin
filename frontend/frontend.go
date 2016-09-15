@@ -33,9 +33,11 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string) {
-	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
+	res, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
+	if err != nil {
 		log.Fatalf("could not request cancellation: %v", err)
 	}
+	fmt.Printf("cancel from server %+v\n", res.Index)
 	close(waitForCancel) // assume that we got an ok=true
 }
 
