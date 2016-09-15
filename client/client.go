@@ -14,12 +14,10 @@ import (
 )
 
 var (
-	frontend = flag.Bool("frontend", false, "if true - has superpowers")
-	debug    = flag.Bool("d", false, "debug mode")
-	tosses   = flag.Int("t", 2, "number of tosses")
-	user     = flag.String("u", "EXTERNAL", "the client name")
-	port     = flag.String("p", "50051", "server port - will include full URL later")
-	timeOut  = flag.Int("o", 14, "timeout for EXTERNAL")
+	debug  = flag.Bool("d", false, "debug mode")
+	tosses = flag.Int("t", 2, "number of tosses")
+	user   = flag.String("u", "EXTERNAL", "the client name")
+	port   = flag.String("p", "50051", "server port - will include full URL later")
 )
 
 var waitForCancel chan struct{}
@@ -42,28 +40,13 @@ func getCancel(c cpb.CoinClient, name string) {
 	close(waitForCancel) // assume that we got an ok=true
 }
 
-// getResult makes a blocking request to the server
-func getResult(c cpb.CoinClient, name string) {
-	solution, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not request result: %v", err)
-	}
-	fmt.Printf("%v", solution)
-}
-
 // dice
 func toss() int {
 	return rand.Intn(6)
 }
 
 // rools returns true if n tosses are all 5's
-func rolls(n int, cn int) bool {
-	if *user == "EXTERNAL" {
-		if cn < *timeOut {
-			return false
-		}
-		return true
-	}
+func rolls(n int) bool {
 	ok := true
 	for i := 0; i < n; i++ {
 		ok = ok && toss() == 5
@@ -80,7 +63,7 @@ func search(work *cpb.Work) (uint32, bool) {
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
 	for cn := 0; ; cn++ {
-		if rolls(*tosses, cn) { // a win?
+		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
 			ok = true
 			break
@@ -112,9 +95,6 @@ var myID uint32
 func main() {
 	flag.Parse()
 
-	if *frontend {
-		*user = "EXTERNAL" // appears as EXTERNAL to servers
-	}
 	address := "localhost:" + *port
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
@@ -137,15 +117,6 @@ func main() {
 
 	// main cycle
 	for {
-		if *frontend {
-			// we issue the blocks
-			newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
-			if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
-				log.Fatalf("could not issue block: %v", err)
-			}
-			// we handle results
-			go getResult(c, name)
-		}
 		fmt.Printf("Fetching work %s ..\n", name)
 		// get ready, get set ... this needs to block
 		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
