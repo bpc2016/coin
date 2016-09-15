@@ -84,6 +84,31 @@ done:
 	return theNonce, ok
 }
 
+// login to server c, returns a id
+func login(c cpb.CoinClient, name string) uint32 {
+	// Contact the server and print out its response.
+	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not login: %v", err)
+	}
+	log.Printf("Login successful. Assigned id: %d\n", r.Id)
+	return r.Id
+}
+
+// sign up with server c
+func signUp(c cpb.CoinClient, name string) *cpb.Work {
+	// get ready, get set ... this needs to block at each server
+	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not get work: %v", err)
+	}
+
+	if *debug {
+		log.Printf("Got work %+v\n", r.Work)
+	}
+	return r.Work
+}
+
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
@@ -104,35 +129,25 @@ func main() {
 	c := cpb.NewCoinClient(conn)
 
 	name := *user
-	// Contact the server and print out its response.
-	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not login: %v", err)
-	}
-	log.Printf("Login successful. Assigned id: %d\n", r.Id)
 
-	myID = r.Id
+	// Contact the server and print out its response.
+	myID = login(c, name)
 
 	// main cycle
 	for {
 		fmt.Printf("Fetching work %s ..\n", name)
 		// get ready, get set ... this needs to block
-		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-		if err != nil {
-			log.Fatalf("could not get work: %v", err)
-		}
-		if *debug {
-			log.Printf("Got work %+v\n", r.Work)
-		}
+		work := signUp(c, name)
+
 		look := make(chan struct{}, 1) // for search
 		quit := make(chan struct{}, 1) // for this loop
-		// in parallel - seek cancellation
+		// look out for cancellation
 		go getCancel(c, name, look, quit)
 		// search blocks
-		theNonce, ok := search(r.Work, look)
+		theNonce, ok := search(work, look)
 		if ok {
 			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-			win := annouceWin(c, theNonce, r.Work.Coinbase)
+			win := annouceWin(c, theNonce, work.Coinbase)
 			if win { // it's possible that my winning nonce was late!
 				fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
 			}
