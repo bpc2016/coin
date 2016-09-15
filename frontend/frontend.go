@@ -41,11 +41,11 @@ func getCancel(c cpb.CoinClient, name string) {
 
 // getResult makes a blocking request to the server
 func getResult(c cpb.CoinClient, name string) {
-	solution, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
+	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not request result: %v", err)
 	}
-	fmt.Printf("%v", solution)
+	fmt.Printf("%v\n", res.Solution)
 }
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
@@ -116,7 +116,7 @@ func main() {
 		// we handle results
 		go getResult(c, name)
 
-		fmt.Printf("Fetching work %s ..\n", name)
+		//fmt.Printf("Fetching work %s ..\n", name)
 		// get ready, get set ... this needs to block
 		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 		if err != nil {
