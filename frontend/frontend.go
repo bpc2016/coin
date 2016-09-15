@@ -104,13 +104,13 @@ func getResult(backends []cpb.CoinClient, name string) {
 		if err != nil {
 			log.Fatalf("could not request result from server %d: %v", i, err)
 		}
-		fmt.Printf("%v\n", res.Solution)
+		fmt.Printf("%v\n", res.Winner)
 		// then spread it around!
 		for j, co := range backends {
 			if j == i {
 				continue
 			}
-			annouceWin(co, 99, res.Solution)
+			annouceWin(co, res.Winner.Nonce, res.Winner.Coinbase)
 		}
 	}
 }
