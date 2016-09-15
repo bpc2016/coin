@@ -71,9 +71,9 @@ message AnnounceReply {
   bool ok = 1;
 }
 
-// GetCancel response is boolean
+// GetCancel response is the index of server
 message GetCancelReply {
-  bool ok = 1;
+  uint32 index = 1;
 }
 
 // IssueBlock response is boolean
