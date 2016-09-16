@@ -214,7 +214,7 @@ func main() {
 				// search blocks
 				theNonce, ok := search(look)
 				if ok {
-					fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
+					// fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
 					win := annouceWin(c, theNonce, r.Work.Coinbase)
 					if win { // it's possible that my winning nonce was late!
 						fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
