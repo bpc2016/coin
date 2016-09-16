@@ -158,7 +158,7 @@ func getResult(c cpb.CoinClient, name string) {
 	if err != nil {
 		log.Fatalf("could not request result: %v", err)
 	}
-	fmt.Printf("%v\n", res.Winner)
+	fmt.Printf("%+v\n", res)
 	// TODO rebroadcast an announceWin UNLESS the winner is EXTERNAL (thats an echo)
 	// TODO change the format of getresultreply so that it carries the source server index
 }
