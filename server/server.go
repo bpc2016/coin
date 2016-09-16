@@ -130,7 +130,7 @@ var resultchan chan cpb.Win //string
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan                 // wait for a result
 	fmt.Printf("sendresult: %v\n", result) // send this back to client
-	return &cpb.GetResultReply{Winner: &result}, nil
+	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
 // initalise
