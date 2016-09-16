@@ -152,13 +152,23 @@ func getCancel(c cpb.CoinClient, name string, look chan struct{}, quit chan stru
 	quit <- struct{}{} // quit loop
 }
 
+var backends []cpb.CoinClient
+
 // getResult makes a blocking request to the server
 func getResult(c cpb.CoinClient, name string) {
 	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
 	if err != nil {
 		log.Fatalf("could not request result: %v", err)
 	}
-	fmt.Printf("%+v\n", res)
+	if res.Winner.Coinbase != "EXTERNAL" {
+		fmt.Printf("%d, %s, %d\n", res.Index, res.Winner.Coinbase, res.Winner.Nonce)
+		for index, c := range backends {
+			if uint32(index) == res.Index {
+				continue
+			}
+			annouceWin(c, 99, "EXTERNAL") // bogus announcement
+		}
+	}
 	// TODO rebroadcast an announceWin UNLESS the winner is EXTERNAL (thats an echo)
 	// TODO change the format of getresultreply so that it carries the source server index
 }
@@ -175,8 +185,6 @@ func annouceWin(c coinServer, nonce uint32, coinbase string) bool {
 
 func main() {
 	flag.Parse()
-
-	var backends []cpb.CoinClient
 
 	for index := 0; index < *servers; index++ {
 		addr := fmt.Sprintf("localhost:%d", 50051+index)
@@ -195,14 +203,14 @@ func main() {
 		quit := make(chan struct{}, *servers)            // for this loop
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
 		for _, c := range backends {                     // will need to use teh index!!
-			go func(c cpb.CoinClient, newBlock string, look chan struct{}, quit chan struct{}) {
+			go func(c cpb.CoinClient, newBlock string, quit chan struct{}) {
 				if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
 					log.Fatalf("could not issue block: %v", err)
 				}
 				// frontend handles results
 				go getResult(c, "EXTERNAL")
 				// get ready, get set ... this needs to block
-				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
+				_, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
 				if err != nil {
 					log.Fatalf("could not get work: %v", err)
 				}
@@ -211,16 +219,19 @@ func main() {
 				}
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", look, quit)
-				// search blocks
-				theNonce, ok := search(look)
-				if ok {
-					// fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
-					win := annouceWin(c, theNonce, r.Work.Coinbase)
-					if win { // it's possible that my winning nonce was late!
-						fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
-					}
-				}
-			}(c, newBlock, look, quit)
+			}(c, newBlock, quit)
+		}
+		// 'search' blocks - the *sole* External one
+		theNonce, ok := search(look)
+		if ok {
+			win := true
+			for _, c := range backends {
+				// fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
+				win = win && annouceWin(c, theNonce, "EXTERNAL") // our 'coinbase'
+			}
+			if win { // it's possible that my winning nonce was late!
+				fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
+			}
 		}
 		for i := 0; i < *servers; i++ {
 			<-quit // wait for cancellation from each server
