@@ -49,6 +49,7 @@ done:
 	return theNonce, ok
 }
 
+/*
 // login to each server
 func login(backends []cpb.CoinClient, name string) {
 	// Contact each server and print out its response.
@@ -70,6 +71,7 @@ func issueBlock(backends []cpb.CoinClient) {
 		}
 	}
 }
+
 
 // sign up with server c
 func signUp(backends []cpb.CoinClient, name string) {
@@ -114,6 +116,52 @@ func getResult(backends []cpb.CoinClient, name string) {
 		}
 	}
 }
+*/
+
+// login to server c, returns a id
+func login(c cpb.CoinClient, name string) uint32 {
+	// Contact the server and print out its response.
+	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not login: %v", err)
+	}
+	log.Printf("Login successful. Assigned id: %d\n", r.Id)
+	return r.Id
+}
+
+// sign up with server c
+func signUp(c cpb.CoinClient, name string) *cpb.Work {
+	// get ready, get set ... this needs to block at each server
+	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not get work: %v", err)
+	}
+
+	if *debug {
+		log.Printf("Got work %+v\n", r.Work)
+	}
+	return r.Work
+}
+
+// getCancel makes a blocking request to the server
+func getCancel(c cpb.CoinClient, name string, look chan struct{}, quit chan struct{}) {
+	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
+		log.Fatalf("could not request cancellation: %v", err)
+	}
+	look <- struct{}{} // stop search
+	quit <- struct{}{} // quit loop
+}
+
+// getResult makes a blocking request to the server
+func getResult(c cpb.CoinClient, name string) {
+	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not request result: %v", err)
+	}
+	fmt.Printf("%v\n", res.Winner)
+	// TODO rebroadcast an announceWin UNLESS the winner is EXTERNAL (thats an echo)
+	// TODO change the format of getresultreply so that it carries the source server index
+}
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c coinServer, nonce uint32, coinbase string) bool {
@@ -128,16 +176,6 @@ func annouceWin(c coinServer, nonce uint32, coinbase string) bool {
 func main() {
 	flag.Parse()
 
-	// address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
-	// Set up a connection to the server.
-	// conn, err := grpc.Dial(address, grpc.WithInsecure())
-	// if err != nil {
-	// 	log.Fatalf("did not connect: %v", err)
-	// }
-	// defer conn.Close()
-
-	//for _, addr := range strings.Split(*backends, ",")
-
 	var backends []cpb.CoinClient
 
 	for index := 0; index < *servers; index++ {
@@ -148,49 +186,129 @@ func main() {
 		}
 		defer conn.Close()
 		client := cpb.NewCoinClient(conn)
+		login(client, "EXTERNAL")
 		backends = append(backends, client)
 	}
 
-	//c := cpb.NewCoinClient(conn)
-
-	name := "EXTERNAL" // appears as EXTERNAL to servers
-
-	login(backends, name) // login to backends
-
-	// main cycle
 	for {
-		// frontend issues the blocks
-		issueBlock(backends)
-		// get on the start line with each server's other clients
-		signUp(backends, name)
-		if *debug {
-			log.Printf("...\n")
+		look := make(chan struct{}, *servers)            // for search
+		quit := make(chan struct{}, *servers)            // for this loop
+		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
+		for _, c := range backends {                     // will need to use teh index!!
+			go func(c cpb.CoinClient, newBlock string, look chan struct{}, quit chan struct{}) {
+				if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
+					log.Fatalf("could not issue block: %v", err)
+				}
+				// frontend handles results
+				go getResult(c, "EXTERNAL")
+				// get ready, get set ... this needs to block
+				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
+				if err != nil {
+					log.Fatalf("could not get work: %v", err)
+				}
+				if *debug {
+					log.Printf("...\n")
+				}
+				// in parallel - seek cancellation
+				go getCancel(c, "EXTERNAL", look, quit)
+				// search blocks
+				theNonce, ok := search(look)
+				if ok {
+					fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
+					win := annouceWin(c, theNonce, r.Work.Coinbase)
+					if win { // it's possible that my winning nonce was late!
+						fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
+					}
+				}
+			}(c, newBlock, look, quit)
 		}
-
-		look := make(chan struct{}, *servers) // for search
-		quit := make(chan struct{}, *servers) // for this loop
-		// look out for  cancellation
-		go getCancel(backends, name, look, quit)
-		// frontend handles results
-		go getResult(backends, name)
-		// search blocks
-		theNonce, ok := search(look) // search here doesnt involve block!
-		if ok {
-			fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
-			win := true
-			for _, c := range backends {
-				win = win && annouceWin(c, theNonce, "EXTERNAL")
-			}
-			if win { // it's possible that my winning nonce was late!
-				fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
-			}
-		}
-
 		for i := 0; i < *servers; i++ {
 			<-quit // wait for cancellation from each server
 		}
 
 		fmt.Printf("-----------------------\n")
 	}
+
+	/* ORIGINAL, WORKING!
+
+	   // main cycle
+	   	for {
+	   		// frontend issues the blocks
+	   		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
+	   		if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
+	   			log.Fatalf("could not issue block: %v", err)
+	   		}
+	   		// frontend handles results
+	   		go getResult(c, name)
+	   		// get ready, get set ... this needs to block
+	   		r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+	   		if err != nil {
+	   			log.Fatalf("could not get work: %v", err)
+	   		}
+	   		if *debug {
+	   			log.Printf("...\n")
+	   		}
+	   		look := make(chan struct{}, 1) // for search
+	   		quit := make(chan struct{}, 1) // for this loop
+	   		// in parallel - seek cancellation
+	   		go getCancel(c, name, look, quit)
+	   		// search blocks
+	   		theNonce, ok := search(r.Work, look)
+	   		if ok {
+	   			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+	   			win := annouceWin(c, theNonce, r.Work.Coinbase)
+	   			if win { // it's possible that my winning nonce was late!
+	   				fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
+	   			}
+	   		}
+
+	   		<-quit // wait for cancellation from server
+
+	   		fmt.Printf("-----------------------\n")
+	   }
+
+	*/
+
+	//c := cpb.NewCoinClient(conn)
+
+	// login(backends, name) // login to backends
+
+	/*
+		// main cycle
+		for {
+			// frontend issues the blocks
+			issueBlock(backends)
+			// get on the start line with each server's other clients
+			signUp(backends, name)
+			if *debug {
+				log.Printf("...\n")
+			}
+
+			look := make(chan struct{}, *servers) // for search
+			quit := make(chan struct{}, *servers) // for this loop
+			// look out for  cancellation
+			go getCancel(backends, name, look, quit)
+			// frontend handles results
+			go getResult(backends, name)
+			// search blocks
+			theNonce, ok := search(look) // search here doesnt involve block!
+			if ok {
+				fmt.Printf("EXT ... sending solution (%d) \n", theNonce)
+				win := true
+				for _, c := range backends {
+					win = win && annouceWin(c, theNonce, "EXTERNAL")
+				}
+				if win { // it's possible that my winning nonce was late!
+					fmt.Printf("== EXT == FOUND -> %d\n", theNonce)
+				}
+			}
+
+			for i := 0; i < *servers; i++ {
+				<-quit // wait for cancellation from each server
+			}
+
+			fmt.Printf("-----------------------\n")
+		}
+	*/
 
 }
