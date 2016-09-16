@@ -128,8 +128,8 @@ var resultchan chan cpb.Win //string
 
 // GetResult sends back win to frontend : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
-	result := <-resultchan                   // wait for a result
-	fmt.Printf("getresult gets: %v", result) // send this back to client
+	result := <-resultchan                 // wait for a result
+	fmt.Printf("sendresult: %v\n", result) // send this back to client
 	return &cpb.GetResultReply{Winner: &result}, nil
 }
 
@@ -157,7 +157,7 @@ func main() {
 	s.start.Add(1) // get work start
 
 	blockchan = make(chan string, 1) // buffered
-	resultchan = make(chan cpb.Win)  //, 1) // buffered
+	resultchan = make(chan cpb.Win)
 
 	go func() {
 		for {
