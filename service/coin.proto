@@ -81,9 +81,10 @@ message IssueBlockReply {
   bool ok = 1;
 }
 
-// GetResult response is string
+// GetResult response is the winner details + server index
 message GetResultReply {
   Win winner = 1;
+  uint32 index = 2;
 }
 
 message Work {
