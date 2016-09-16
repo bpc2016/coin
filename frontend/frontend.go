@@ -100,7 +100,7 @@ func getResult(c cpb.CoinClient, name string) {
 }
 
 // annouceWin is what causes the server to issue a cancellation
-func annouceWin(c coinServer, nonce uint32, coinbase string) bool {
+func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if err != nil {
@@ -129,7 +129,7 @@ func main() {
 		quit := make(chan struct{}, *servers)            // for this loop
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
 		for _, c := range backends {                     // will need to use teh index!!
-			go func(c cpb.CoinClient, newBlock string, quit chan struct{}) {
+			go func(c cpb.CoinClient, newBlock string, look chan struct{}, quit chan struct{}) {
 				if _, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock}); err != nil {
 					log.Fatalf("could not issue block: %v", err)
 				}
@@ -145,7 +145,7 @@ func main() {
 				}
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", look, quit)
-			}(c, newBlock, quit)
+			}(c, newBlock, look, quit)
 		}
 		// 'search' blocks - the *sole* External one
 		theNonce, ok := search(look)
