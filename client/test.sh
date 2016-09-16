@@ -24,8 +24,3 @@
                 ./client -t $TOSSES -u $COUNTER -s $INDEX &
                 let COUNTER-=1
         done
-
-        # for i in `seq 1 100`;
-        # do
-        #         ./client -t 4 -u $i  &
-        # done     
