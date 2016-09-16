@@ -20,6 +20,31 @@ var (
 	server = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
 )
 
+// login to server c, returns a id
+func login(c cpb.CoinClient, name string) uint32 {
+	// Contact the server and print out its response.
+	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not login: %v", err)
+	}
+	log.Printf("Login successful. Assigned id: %d\n", r.Id)
+	return r.Id
+}
+
+// sign up with server c
+func signUp(c cpb.CoinClient, name string) *cpb.Work {
+	// get ready, get set ... this needs to block at each server
+	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+	if err != nil {
+		log.Fatalf("could not get work: %v", err)
+	}
+
+	if *debug {
+		log.Printf("Got work %+v\n", r.Work)
+	}
+	return r.Work
+}
+
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
@@ -82,31 +107,6 @@ func search(work *cpb.Work, look chan struct{}) (uint32, bool) {
 
 done:
 	return theNonce, ok
-}
-
-// login to server c, returns a id
-func login(c cpb.CoinClient, name string) uint32 {
-	// Contact the server and print out its response.
-	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not login: %v", err)
-	}
-	log.Printf("Login successful. Assigned id: %d\n", r.Id)
-	return r.Id
-}
-
-// sign up with server c
-func signUp(c cpb.CoinClient, name string) *cpb.Work {
-	// get ready, get set ... this needs to block at each server
-	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not get work: %v", err)
-	}
-
-	if *debug {
-		log.Printf("Got work %+v\n", r.Work)
-	}
-	return r.Work
 }
 
 func init() {
