@@ -79,7 +79,7 @@ func rolls(n int) bool {
 func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
-	tick := time.Tick(1 * time.Second) // spin wheels
+	tick := time.Tick(1 * time.Second)
 	for cn := 0; ; cn++ {
 		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
