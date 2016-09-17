@@ -22,9 +22,9 @@ var (
 	myID uint32
 )
 
-// login to server c, returns a id
+// login to server c, returns an id
 func login(c cpb.CoinClient, name string) uint32 {
-	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
+	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name}) // HL
 	fatalF("could not login", err)
 
 	log.Printf("Login successful. Assigned id: %d\n", r.Id)

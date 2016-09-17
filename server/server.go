@@ -19,7 +19,8 @@ var (
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
-// logger type is for the users login details
+// logger type is for the users login details  login OMIT
+
 type logger struct {
 	sync.Mutex //anonymous
 	nextID     int
@@ -29,7 +30,7 @@ type logger struct {
 var users logger
 
 // Login implements cpb.CoinServer
-func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) {
+func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
 	defer users.Unlock()
 	if _, ok := users.loggedIn[in.Name]; ok {
@@ -39,6 +40,8 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	users.loggedIn[in.Name] = users.nextID
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
+
+// nigol OMIT
 
 type blockdata struct {
 	sync.Mutex
