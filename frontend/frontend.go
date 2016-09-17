@@ -95,6 +95,7 @@ func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	return r.Ok
 }
 
+// utilities
 func fatalF(message string, err error) {
 	if err != nil {
 		log.Fatalf(message+": %v", err)

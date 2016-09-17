@@ -18,30 +18,25 @@ var (
 	tosses = flag.Int("t", 2, "number of tosses")
 	user   = flag.String("u", "sole", "the client name")
 	server = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
+
+	myID uint32
 )
 
 // login to server c, returns a id
 func login(c cpb.CoinClient, name string) uint32 {
-	// Contact the server and print out its response.
 	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not login: %v", err)
-	}
+	fatalF("could not login", err)
+
 	log.Printf("Login successful. Assigned id: %d\n", r.Id)
 	return r.Id
 }
 
 // sign up with server c
 func signUp(c cpb.CoinClient, name string) *cpb.Work {
-	// get ready, get set ... this needs to block at each server
 	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-	if err != nil {
-		log.Fatalf("could not get work: %v", err)
-	}
+	fatalF("could not get work", err)
 
-	if *debug {
-		log.Printf("Got work %+v\n", r.Work)
-	}
+	debugF("Got work %+v\n", r.Work)
 	return r.Work
 }
 
@@ -49,19 +44,18 @@ func signUp(c cpb.CoinClient, name string) *cpb.Work {
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
-	if err != nil {
-		log.Fatalf("could not announce win: %v", err)
-	}
+	fatalF("could not announce win", err)
+
 	return r.Ok
 }
 
 // getCancel makes a blocking request to the server
-func getCancel(c cpb.CoinClient, name string, look chan struct{}, quit chan struct{}) {
-	if _, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name}); err != nil {
-		log.Fatalf("could not request cancellation: %v", err)
-	}
-	look <- struct{}{} // stop search
-	quit <- struct{}{} // quit loop
+func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop chan struct{}) {
+	_, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
+	fatalF("could not request cancellation", err)
+
+	stopLooking <- struct{}{} // stop search
+	endLoop <- struct{}{}     // quit loop
 }
 
 // dice
@@ -82,7 +76,7 @@ func rolls(n int) bool {
 }
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
-func search(work *cpb.Work, look chan struct{}) (uint32, bool) {
+func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second) // spin wheels
@@ -94,36 +88,28 @@ func search(work *cpb.Work, look chan struct{}) (uint32, bool) {
 		}
 		// check for a stop order
 		select {
-		case <-look:
+		case <-stopLooking:
 			goto done // if so ... break out of this cycle, return (with ok=false!)
 		default: // continue
 		}
 		// wait for a second here ...
 		<-tick
-		if *debug {
-			fmt.Println(myID, " ", cn)
-		}
+		debugF(myID, " ", cn)
 	}
 
 done:
 	return theNonce, ok
 }
 
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
-
-var myID uint32
-
 func main() {
+	rand.Seed(time.Now().UTC().UnixNano())
 	flag.Parse()
 
 	address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
+	fatalF("did not connect", err)
+
 	defer conn.Close()
 
 	c := cpb.NewCoinClient(conn)
@@ -139,12 +125,12 @@ func main() {
 		// get ready, get set ... this needs to block
 		work := signUp(c, name)
 
-		look := make(chan struct{}, 1) // for search
-		quit := make(chan struct{}, 1) // for this loop
+		stopLooking := make(chan struct{}, 1) // for search
+		endLoop := make(chan struct{}, 1)     // for this loop
 		// look out for cancellation
-		go getCancel(c, name, look, quit)
+		go getCancel(c, name, stopLooking, endLoop)
 		// search blocks
-		theNonce, ok := search(work, look)
+		theNonce, ok := search(work, stopLooking)
 		if ok {
 			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 			win := annouceWin(c, theNonce, work.Coinbase)
@@ -153,9 +139,22 @@ func main() {
 			}
 		}
 
-		<-quit // wait here for cancel from server
+		<-endLoop // wait here for cancel from server
 
 		fmt.Printf("-----------------------\n")
 	}
 
+}
+
+// utilities
+func fatalF(message string, err error) {
+	if err != nil {
+		log.Fatalf(message+": %v", err)
+	}
+}
+
+func debugF(args ...interface{}) {
+	if *debug {
+		log.Println(args...)
+	}
 }
