@@ -83,6 +83,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	for cn := 0; ; cn++ {
 		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
+			debugF("winning! %d nonce: %d", myID, cn)
 			ok = true
 			break
 		}

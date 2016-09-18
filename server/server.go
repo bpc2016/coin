@@ -90,6 +90,9 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
+		// for y := range s.signOut {
+		// 	log.Println("OUT: ", y) //<-s.signOut
+		// }
 		s.stop.Done()  // issue cancellation to our clients
 		s.start.Add(1) // reset getwork start
 		won = true
@@ -155,9 +158,9 @@ func main() {
 
 	s := new(server)
 
-	s.signIn = make(chan string)
-	s.signOut = make(chan string)
-	s.start.Add(1) // get work start
+	s.signIn = make(chan string)  //, *numMiners)
+	s.signOut = make(chan string) //, *numMiners)
+	s.start.Add(1)                // get work start
 
 	blockchan = make(chan string, 1) // buffered
 	resultchan = make(chan cpb.Win)
@@ -168,6 +171,9 @@ func main() {
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
+			// for x := range s.signIn {
+			// 	log.Println("IN: ", x) //<-s.signIn
+			// }
 			fmt.Printf("\n--------------------\nNew race!\n")
 			s.stop.Add(1)                     // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel

@@ -125,6 +125,7 @@ func main() {
 	for {
 		stopLooking := make(chan struct{}, *numServers) // for search
 		endLoop := make(chan struct{}, *numServers)     // for this loop
+		workChan := make(chan *cpb.Work, *numServers)   // for this loop
 		lateEntry := make(chan struct{})                // no more results please
 		theWinner := make(chan string, *numServers)
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
@@ -138,15 +139,24 @@ func main() {
 				// frontend handles results
 				go getResult(c, "EXTERNAL", theWinner, lateEntry)
 				// get ready, get set ... this needs to block
-				_, err = c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
+				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
 				fatalF("could not get work", err)
+				workChan <- r.Work
 
-				debugF("...")
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, newBlock, stopLooking, endLoop, theWinner, lateEntry)
 		}
+		// wait for all to get it
+		// for x := range  {
+		// 	log.Printf("got work %+v\n", x)
+		// }
+		for i := 0; i < *numServers; i++ {
+			log.Printf("got work %+v\n", <-workChan)
+		}
 		// 'search' blocks - the *sole* External one
+		debugF("...")
+
 		theNonce, ok := search(stopLooking)
 		if ok {
 			win := true
