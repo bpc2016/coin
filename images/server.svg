@@ -392,7 +392,7 @@
        sodipodi:type="arc" />
     <text
        xml:space="preserve"
-       style="font-size:18px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       style="font-style:normal;font-weight:normal;font-size:18px;line-height:125%;font-family:Sans;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none"
        x="-529.2298"
        y="389.06174"
        id="text8163"
@@ -401,7 +401,7 @@
          sodipodi:role="line"
          id="tspan8165"
          x="-529.2298"
-         y="389.06174">start.Done() </tspan></text>
+         y="389.06174">stop.Done() </tspan></text>
     <path
        sodipodi:nodetypes="ccc"
        inkscape:connector-curvature="0"
@@ -696,12 +696,12 @@
        transform="matrix(0.22495105,-0.97437007,0.97437007,0.22495105,0,0)"
        sodipodi:linespacing="125%"
        id="text8461"
-       y="433.97971"
-       x="-592.24908"
-       style="font-size:18px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       y="434.47003"
+       x="-602.66498"
+       style="font-style:normal;font-weight:normal;font-size:18px;line-height:125%;font-family:Sans;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none"
        xml:space="preserve"><tspan
-         y="433.97971"
-         x="-592.24908"
+         y="434.47003"
+         x="-602.66498"
          id="tspan8463"
          sodipodi:role="line">annuonceWin</tspan></text>
     <path
