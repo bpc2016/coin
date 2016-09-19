@@ -49,11 +49,20 @@ type blockdata struct {
 
 var block blockdata // models the block information - basis of 'work'
 
+type locked struct {
+	sync.Mutex
+	on bool
+	ch chan struct{}
+}
+
+var tooLate locked
+
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	debugF("Work request: %+v\n", in)
 	s.signIn <- in.Name // register
-	s.start.Wait()      // all must wait, start when this is Done()
+	// s.start.Wait()      // all must wait, start when this is Done()
+	<-tooLate.ch // all must wait, start when this is closed
 	block.Lock()
 	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
 	block.Unlock()
@@ -62,8 +71,22 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	won := s.vetWin(*soln.Win)
-	return &cpb.AnnounceReply{Ok: won}, nil
+	//won := s.vetWin(*soln.Win)
+	tooLate.Lock()
+	defer tooLate.Unlock()
+	if tooLate.on {
+		return &cpb.AnnounceReply{Ok: false}, nil
+	}
+	// we have a winner
+	tooLate.on = true // until call for new run resets this one
+	resultchan <- *soln.Win
+	for i := 0; i < *numMiners; i++ {
+		<-s.signOut
+	}
+	tooLate.ch = make(chan struct{})
+	s.stop.Done() // issue cancellation to our clients
+	// s.start.Add(1) // reset getwork start
+	return &cpb.AnnounceReply{Ok: true}, nil
 }
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
@@ -75,25 +98,25 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 }
 
 // vetWins handles wins - all are directed here
-func (s *server) vetWin(thewin cpb.Win) bool {
-	s.search.Lock()
-	defer s.search.Unlock()
-	won := false
-	select {
-	case <-s.search.ch: // closed if already have a winner
-	default: // should vet the solution, return false otherwise!!
-		close(s.search.ch)   // until call for new run resets this one
-		resultchan <- thewin // fmt.Sprintf("Winner: %+v", thewin)
-		for i := 0; i < *numMiners; i++ {
-			<-s.signOut
-		}
+// func (s *server) vetWin(thewin cpb.Win) bool {
+// 	s.search.Lock()
+// 	defer s.search.Unlock()
+// 	won := false
+// 	select {
+// 	case <-s.search.ch: // closed if already have a winner
+// 	default: // should vet the solution, return false otherwise!!
+// 		close(s.search.ch)   // until call for new run resets this one
+// 		resultchan <- thewin // fmt.Sprintf("Winner: %+v", thewin)
+// 		for i := 0; i < *numMiners; i++ {
+// 			<-s.signOut
+// 		}
 
-		s.stop.Done()  // issue cancellation to our clients
-		s.start.Add(1) // reset getwork start
-		won = true
-	}
-	return won
-}
+// 		s.stop.Done()  // issue cancellation to our clients
+// 		s.start.Add(1) // reset getwork start
+// 		won = true
+// 	}
+// 	return won
+// }
 
 type privchannel struct {
 	sync.Mutex
@@ -166,22 +189,27 @@ func main() {
 
 	s.signIn = make(chan string, *numMiners)
 	s.signOut = make(chan string, *numMiners)
-	s.start.Add(1) // get work start
+	//s.start.Add(1) // get work start
+	tooLate.ch = make(chan struct{}) // prepare for getwork start
 
 	blockchan = make(chan string, 1) // buffered
 	resultchan = make(chan cpb.Win)
 
 	go func() {
 		for {
+			tooLate.Lock()
+			tooLate.on = false
+			tooLate.Unlock()
 			getNewBlock()
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
 
 			fmt.Printf("\n--------------------\nNew race!\n")
-			s.stop.Add(1)                     // prep channel for getcancels
-			s.search.ch = make(chan struct{}) // reset this channel
-			s.start.Done()                    // start our miners
+			s.stop.Add(1)     // prep channel for getcancels
+			close(tooLate.ch) // start our miners
+			// s.search.ch = make(chan struct{}) // reset this channel
+			// s.start.Done() // start our miners
 		}
 	}()
 
