@@ -38,12 +38,12 @@ type lockable struct {
 }
 
 var (
-	users     logger
-	block     blockdata // models the block information - basis of 'work'
-	workgates lockable
-	signIn    chan string // for registering users in getwork
-	signOut   chan string // for registering leaving users in getcancel
-	stop      sync.WaitGroup
+	users   logger
+	block   blockdata // models the block information - basis of 'work'
+	start   lockable
+	signIn  chan string // for registering users in getwork
+	signOut chan string // for registering leaving users in getcancel
+	stop    sync.WaitGroup
 )
 
 // Login implements cpb.CoinServer
@@ -64,7 +64,7 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	debugF("Work request: %+v\n", in)
 	signIn <- in.Name // register
-	<-workgates.ch    // all must wait, start when this is closed
+	<-start.ch        // all must wait, start when this is closed
 
 	block.Lock()
 	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
@@ -74,19 +74,19 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	workgates.Lock()
-	defer workgates.Unlock()
-	if workgates.haveWinner {
+	start.Lock()
+	defer start.Unlock()
+	if start.haveWinner {
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a winner
-	workgates.haveWinner = true // until call for new run resets this one
+	start.haveWinner = true // until call for new run resets this one
 	resultchan <- *soln.Win
 	for i := 0; i < *numMiners; i++ {
 		<-signOut
 	}
-	workgates.ch = make(chan struct{}) // reset getwork start
-	stop.Done()                        // issue cancellation to our clients
+	start.ch = make(chan struct{}) // reset getwork start
+	stop.Done()                    // issue cancellation to our clients
 	return &cpb.AnnounceReply{Ok: true}, nil
 }
 
@@ -158,23 +158,23 @@ func main() {
 
 	signIn = make(chan string, *numMiners)
 	signOut = make(chan string, *numMiners)
-	workgates.ch = make(chan struct{}) // prepare for getwork start
+	start.ch = make(chan struct{}) // prepare for getwork start
 	blockchan = make(chan string, 1)
 	resultchan = make(chan cpb.Win)
 
 	go func() {
 		for {
-			workgates.Lock()
-			workgates.haveWinner = false
-			workgates.Unlock()
+			start.Lock()
+			start.haveWinner = false
+			start.Unlock()
 			getNewBlock()
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
 
 			fmt.Printf("\n--------------------\nNew race!\n")
-			stop.Add(1)         // prep channel for getcancels
-			close(workgates.ch) // start our miners
+			stop.Add(1)     // prep channel for getcancels
+			close(start.ch) // start our miners
 		}
 	}()
 
