@@ -36,7 +36,7 @@ func signUp(c cpb.CoinClient, name string) *cpb.Work {
 	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 	fatalF("could not get work", err)
 
-	debugF("Got work %+v\n", r.Work)
+	debugF("Got work:\n%s\n", r.Work)
 	return r.Work
 }
 
@@ -83,7 +83,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	for cn := 0; ; cn++ {
 		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
-			debugF("winning! %d nonce: %d", myID, cn)
+			debugF("winning! %d nonce: %d\n", myID, cn)
 			ok = true
 			break
 		}
@@ -95,7 +95,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 		}
 		// wait for a second here ...
 		<-tick
-		debugF(myID, " ", cn)
+		debugF("| %d %d\n", myID, cn)
 	}
 
 done:
@@ -154,8 +154,8 @@ func fatalF(message string, err error) {
 	}
 }
 
-func debugF(args ...interface{}) {
+func debugF(format string, args ...interface{}) {
 	if *debug {
-		log.Println(args...)
+		log.Printf(format, args...)
 	}
 }

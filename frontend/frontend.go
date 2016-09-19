@@ -22,9 +22,9 @@ var (
 func search(stopLooking chan struct{}) (uint32, bool) {
 	var theNonce uint32
 	var ok bool
-	tick := time.Tick(1 * time.Second) // spin wheels
+	tick := time.Tick(1 * time.Second)
 	for cn := 0; ; cn++ {
-		if cn >= *timeOut { // a win? - for the frontend, this is just a timeout
+		if cn >= *timeOut {
 			theNonce = uint32(cn)
 			ok = true
 			break
@@ -32,12 +32,12 @@ func search(stopLooking chan struct{}) (uint32, bool) {
 		// check for a stop order
 		select {
 		case <-stopLooking:
-			goto done // if so ... break out of this cycle, return (with ok=false!)
+			goto done
 		default: // continue
 		}
 		// wait for a second here ...
 		<-tick
-		debugF("EXT ", cn)
+		debugF(" | EXT %d\n", cn)
 	}
 
 done:
@@ -46,7 +46,6 @@ done:
 
 // login to server c, returns a id
 func login(c cpb.CoinClient, name string) uint32 {
-	// Contact the server and print out its response.
 	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
 	fatalF("could not login", err)
 
@@ -102,9 +101,9 @@ func fatalF(message string, err error) {
 	}
 }
 
-func debugF(args ...interface{}) {
+func debugF(format string, args ...interface{}) {
 	if *debug {
-		log.Println(args...)
+		log.Printf(format, args...)
 	}
 }
 
@@ -125,11 +124,12 @@ func main() {
 	for {
 		stopLooking := make(chan struct{}, *numServers) // for search
 		endLoop := make(chan struct{}, *numServers)     // for this loop
-		workChan := make(chan *cpb.Work, *numServers)   // for this loop
+		workChan := make(chan *cpb.Work, *numServers)   // for gathering signins
 		lateEntry := make(chan struct{})                // no more results please
 		theWinner := make(chan string, *numServers)
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
-		for _, c := range servers {                      // will need to use teh index!!
+
+		for _, c := range servers { // will need to use teh index!!
 			go func(c cpb.CoinClient, newBlock string,
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
@@ -147,16 +147,14 @@ func main() {
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, newBlock, stopLooking, endLoop, theWinner, lateEntry)
 		}
-		// wait for all to get it
-		// for x := range  {
-		// 	log.Printf("got work %+v\n", x)
-		// }
-		for i := 0; i < *numServers; i++ {
-			log.Printf("got work %+v\n", <-workChan)
-		}
-		// 'search' blocks - the *sole* External one
-		debugF("...")
 
+		for i := 0; i < *numServers; i++ {
+			debugF("%+v\n", <-workChan) // log.Printf("got work %+v\n", <-workChan)
+		}
+
+		debugF("%s\n", "...")
+
+		// 'search' blocks - the *sole* External one
 		theNonce, ok := search(stopLooking)
 		if ok {
 			win := true

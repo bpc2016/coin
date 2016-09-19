@@ -20,11 +20,10 @@ var (
 )
 
 // logger type is for the users login details  login OMIT
-
 type logger struct {
-	sync.Mutex //anonymous
-	nextID     int
-	loggedIn   map[string]int
+	sync.Mutex
+	nextID   int
+	loggedIn map[string]int
 }
 
 var users logger
@@ -48,13 +47,11 @@ type blockdata struct {
 	data string
 }
 
-var block blockdata // models teh block information - basis of 'work'
+var block blockdata // models the block information - basis of 'work'
 
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	if *debug {
-		fmt.Printf("Work request: %+v\n", in)
-	}
+	debugF("Work request: %+v\n", in)
 	s.signIn <- in.Name // register
 	s.start.Wait()      // all must wait, start when this is Done()
 	block.Lock()
@@ -90,9 +87,7 @@ func (s *server) vetWin(thewin cpb.Win) bool {
 		for i := 0; i < *numMiners; i++ {
 			<-s.signOut
 		}
-		// for y := range s.signOut {
-		// 	log.Println("OUT: ", y) //<-s.signOut
-		// }
+
 		s.stop.Done()  // issue cancellation to our clients
 		s.start.Add(1) // reset getwork start
 		won = true
@@ -139,6 +134,19 @@ func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.
 	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
+// utilities
+func fatalF(message string, err error) {
+	if err != nil {
+		log.Fatalf(message+": %v", err)
+	}
+}
+
+func debugF(format string, args ...interface{}) {
+	if *debug {
+		log.Printf(format, args...)
+	}
+}
+
 // initalise
 func init() {
 	users.loggedIn = make(map[string]int)
@@ -152,15 +160,13 @@ func main() {
 
 	port := fmt.Sprintf(":%d", 50051+*index)
 	lis, err := net.Listen("tcp", port) // RPC port - localhost?
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+	fatalF("failed to listen", err)
 
 	s := new(server)
 
-	s.signIn = make(chan string)  //, *numMiners)
-	s.signOut = make(chan string) //, *numMiners)
-	s.start.Add(1)                // get work start
+	s.signIn = make(chan string, *numMiners)
+	s.signOut = make(chan string, *numMiners)
+	s.start.Add(1) // get work start
 
 	blockchan = make(chan string, 1) // buffered
 	resultchan = make(chan cpb.Win)
@@ -171,9 +177,7 @@ func main() {
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-s.signIn
 			}
-			// for x := range s.signIn {
-			// 	log.Println("IN: ", x) //<-s.signIn
-			// }
+
 			fmt.Printf("\n--------------------\nNew race!\n")
 			s.stop.Add(1)                     // prep channel for getcancels
 			s.search.ch = make(chan struct{}) // reset this channel
