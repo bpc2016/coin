@@ -26,7 +26,25 @@ type logger struct {
 	loggedIn map[string]int
 }
 
-var users logger
+type blockdata struct {
+	sync.Mutex
+	data string
+}
+
+type lockable struct {
+	sync.Mutex
+	haveWinner bool
+	ch         chan struct{}
+}
+
+var (
+	users     logger
+	block     blockdata // models the block information - basis of 'work'
+	workgates lockable
+	signIn    chan string // for registering users in getwork
+	signOut   chan string // for registering leaving users in getcancel
+	stop      sync.WaitGroup
+)
 
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
@@ -42,26 +60,11 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 
 // nigol OMIT
 
-type blockdata struct {
-	sync.Mutex
-	data string
-}
-
-var block blockdata // models the block information - basis of 'work'
-
-type locked struct {
-	sync.Mutex
-	on bool
-	ch chan struct{}
-}
-
-var workgates locked
-
 // GetWork implements cpb.CoinServer, synchronise start of miners
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	debugF("Work request: %+v\n", in)
-	s.signIn <- in.Name // register
-	<-workgates.ch      // all must wait, start when this is closed
+	signIn <- in.Name // register
+	<-workgates.ch    // all must wait, start when this is closed
 
 	block.Lock()
 	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
@@ -73,24 +76,24 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	workgates.Lock()
 	defer workgates.Unlock()
-	if workgates.on {
+	if workgates.haveWinner {
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a winner
-	workgates.on = true // until call for new run resets this one
+	workgates.haveWinner = true // until call for new run resets this one
 	resultchan <- *soln.Win
 	for i := 0; i < *numMiners; i++ {
-		<-s.signOut
+		<-signOut
 	}
 	workgates.ch = make(chan struct{}) // reset getwork start
-	s.stop.Done()                      // issue cancellation to our clients
+	stop.Done()                        // issue cancellation to our clients
 	return &cpb.AnnounceReply{Ok: true}, nil
 }
 
 // GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	s.signOut <- in.Name // register
-	s.stop.Wait()        // wait for valid solution  OR timeout
+	signOut <- in.Name // register
+	stop.Wait()        // wait for valid solution  OR timeout
 	serv := *index
 	return &cpb.GetCancelReply{Index: uint32(serv)}, nil
 }
@@ -101,11 +104,7 @@ type privchannel struct {
 }
 
 // server is used to implement cpb.CoinServer.
-type server struct {
-	signIn  chan string // for registering users in getwork
-	signOut chan string // for registering leaving users in getcancel
-	stop    sync.WaitGroup
-}
+type server struct{}
 
 var blockchan chan string
 
@@ -145,10 +144,6 @@ func debugF(format string, args ...interface{}) {
 	}
 }
 
-// initalise
-func init() {
-}
-
 func main() {
 	flag.Parse()
 	users.loggedIn = make(map[string]int)
@@ -161,8 +156,8 @@ func main() {
 
 	s := new(server)
 
-	s.signIn = make(chan string, *numMiners)
-	s.signOut = make(chan string, *numMiners)
+	signIn = make(chan string, *numMiners)
+	signOut = make(chan string, *numMiners)
 	workgates.ch = make(chan struct{}) // prepare for getwork start
 	blockchan = make(chan string, 1)
 	resultchan = make(chan cpb.Win)
@@ -170,15 +165,15 @@ func main() {
 	go func() {
 		for {
 			workgates.Lock()
-			workgates.on = false
+			workgates.haveWinner = false
 			workgates.Unlock()
 			getNewBlock()
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
-				<-s.signIn
+				<-signIn
 			}
 
 			fmt.Printf("\n--------------------\nNew race!\n")
-			s.stop.Add(1)       // prep channel for getcancels
+			stop.Add(1)         // prep channel for getcancels
 			close(workgates.ch) // start our miners
 		}
 	}()
