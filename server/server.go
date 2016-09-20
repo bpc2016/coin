@@ -19,12 +19,12 @@ var (
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
-// logger type is for the users login details logger OMIT
+// logger type is for the users login details
 type logger struct {
 	sync.Mutex
 	nextID   int
 	loggedIn map[string]int
-} // loggerout OMIT
+}
 
 type blockdata struct {
 	sync.Mutex
@@ -37,9 +37,9 @@ type lockable struct {
 	ch          chan struct{}
 }
 
-var ( // users OMIT
+var (
 	users   logger
-	block   blockdata // models the block information - basis of 'work'  usersout OMIT
+	block   blockdata // models the block information - basis of 'work'
 	run     lockable
 	signIn  chan string // for registering users in getwork
 	signOut chan string // for registering leaving users in getcancel
