@@ -19,7 +19,7 @@ var (
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
-// logger type is for the users login details  login OMIT
+// logger type is for the users login details
 type logger struct {
 	sync.Mutex
 	nextID   int
@@ -46,6 +46,7 @@ var (
 	stop    sync.WaitGroup
 )
 
+// login OMIT
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
