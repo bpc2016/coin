@@ -1,0 +1,124 @@
+Pooled Bitcoin Mining with Go
+A Distributed Solution
+
+Busiso Chisala
+Amateur Gopher 
+busiso.chisala@gmail.com
+
+* Agenda
+
+The setup consists 
+
+- a small cluster of *servers* (a single location?)
+
+- many stawberry Pis as *clients* (across the globe)
+
+- server, client software written in Go
+
+* Bitcoin Mining
+
+- users broadcast *transactions* to the bitcoin peer-to-peer network
+- mining operation gathers a set of transactions to form potential  *next block*
+- miner searches for a uint32 'nonce' determined by 
+    - block contents 
+    - going difficulty level
+- if found, this solution is broadcast and the block tops the *blockchain*
+- miner earns a reward in *coinbase bitcoin* (25BTC, this year goes down to 12.5)
+- even if not found, _repeat_
+
+*Note:* each loop is expected to last about ten minutes. 
+
+
+* Pooled Mining
+
+Mining is power intensive and requires a lot of computing effort 
+
+- better to join a *pool*
+- each member searches part of the nonce-space
+- share the proceeds
+
+* Distributed Pool
+
+Our mining model will collect together miners across the internet
+
+- client miners 
+    mine,  get work from and send result to ..
+- servers 
+    responsible for groups of miners, get work from and  forward solution to ..
+- conductor
+    generates the block, runs a full node and talks to the bitcoin network
+
+* Network Setup
+
+.image network.svg
+
+
+* Tools
+
+Communication will involve bytes sequences and be bidirectional
+
+- gRPC 
+- Protobuf
+
+* Proto file  /service/coin.proto
+
+Specifies *rpc* communication between clients and servers, a set of interfaces
+
+    package cpb;  // coin proto buffer
+
+    // The mining service definition.
+    service Coin {
+        rpc Login (LoginRequest) returns (LoginReply) {}
+        rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
+        rpc Announce (AnnounceRequest) returns (AnnounceReply) {}
+        rpc GetCancel (GetCancelRequest) returns (GetCancelReply) {}
+        rpc IssueBlock (IssueBlockRequest) returns (IssueBlockReply) {}
+        rpc GetResult (GetResultRequest) returns (GetResultReply) {}
+    }
+
+- `Login`, `GetWork`, `Announce`, `GetCancel` are implemented by _all_ actors
+- IssueBlock, GetResult are implemented by _conductor_ and _servers_ only
+- in effect, a conductor is an enhanced client
+
+* .. creates /services/coin.pb.go
+
+The following command  in the /service directory invokes the Go proto compiler:
+
+    protoc *.proto --go_out=plugins=grpc:.
+
+- produces the *package*cpb* Go source file `coin.pb.go` which has interfaces such as:
+
+.code ../service/coin.pb.go /^type CoinClient interface/,/LoginReply, error\)/
+
+- which we use in client/client.go
+
+.code ../client/client.go /\/\/ login/,/\", err\)/
+
+
+* Server side implementations
+
+.code ../service/coin.pb.go /^type CoinServer interface/,/LoginReply, error\)/
+is generally more substantial:
+
+        type logger struct {
+            sync.Mutex
+            nextID   int
+            loggedIn map[string]int
+        }
+        var users   logger
+ 
+.code ../server/server.go /login OMIT/,/nigol OMIT/
+
+* Server
+
+.image server.svg
+
+* Server ...ctd
+
+Note how this works
+
+- the server line has the first three events duplicated, but the cycle is demarcated
+- the bold red bars are the mining search operations
+- this server has two clients, the second being a conductor
+
+: both server and clients continuously run loops (vertical dashed lines)
