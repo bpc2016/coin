@@ -69,18 +69,29 @@ func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry c
 	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
 	fatalF("could not request result", err)
 
-	if res.Winner.Coinbase != "EXTERNAL" {
-		select {
-		case <-lateEntry: // we already have declared a winner, do nothing
-		default:
-			close(lateEntry)
-			theWinner <- fmt.Sprintf("%s - miner %d:%s, nonce %d", time.Now().Format("15:04:05"), res.Index, res.Winner.Coinbase, res.Winner.Nonce)
-			for index, c := range servers {
-				if uint32(index) == res.Index {
-					continue
-				}
-				annouceWin(c, 99, "EXTERNAL") // bogus announcement
+	if res.Winner.Coinbase != "EXTERNAL" { // avoid echoes
+		declareWin(theWinner, lateEntry, res.Index, res.Winner.Coinbase, res.Winner.Nonce)
+	}
+}
+
+func declareWin(theWinner chan string, lateEntry chan struct{},
+	index uint32, coinbase string, nonce uint32) {
+	select {
+	case <-lateEntry: // we already have declared a winner, do nothing
+	default:
+		close(lateEntry)
+		str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
+		if index == uint32(*numServers) {
+			str += "external"
+		} else {
+			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
+		}
+		theWinner <- str
+		for i, c := range servers {
+			if uint32(i) == index {
+				continue
 			}
+			annouceWin(c, 99, "EXTERNAL") // bogus announcement
 		}
 	}
 }
@@ -136,7 +147,7 @@ func main() {
 				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock})
 				fatalF("could not issue block", err)
 
-				// frontend handles results
+				// conductor handles results
 				go getResult(c, "EXTERNAL", theWinner, lateEntry)
 				// get ready, get set ... this needs to block
 				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
@@ -149,7 +160,7 @@ func main() {
 		}
 
 		for i := 0; i < *numServers; i++ {
-			debugF("%+v\n", <-workChan) // log.Printf("got work %+v\n", <-workChan)
+			debugF("%+v\n", <-workChan)
 		}
 
 		debugF("%s\n", "...")
@@ -157,14 +168,8 @@ func main() {
 		// 'search' blocks - the *sole* External one
 		theNonce, ok := search(stopLooking)
 		if ok {
-			win := true
-			for _, c := range servers {
-				win = win && annouceWin(c, theNonce, "EXTERNAL") // our 'coinbase' nonce = 14 is from here
-			}
-			if win { // it's possible that my winning nonce was late!
-				close(lateEntry)
-				theWinner <- fmt.Sprintf("%s - external winner", time.Now().Format("15:04:05"))
-			}
+			declareWin(theWinner, lateEntry, uint32(*numServers),
+				"external", theNonce)
 		}
 
 		for i := 0; i < *numServers; i++ {
