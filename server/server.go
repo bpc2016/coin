@@ -156,28 +156,28 @@ func main() {
 
 	s := new(server)
 
-	signIn = make(chan string, *numMiners)
-	signOut = make(chan string, *numMiners)
-	run.ch = make(chan struct{}) // prepare for getwork start
-	blockchan = make(chan string, 1)
-	resultchan = make(chan cpb.Win)
-
+	signIn = make(chan string, *numMiners)  // register incoming miners
+	signOut = make(chan string, *numMiners) // register miners receipt of cancel instructions
+	blockchan = make(chan string, 1)        // transfer block data
+	run.ch = make(chan struct{})            // signal to start mining
+	resultchan = make(chan cpb.Win)         // transfer solution data
+	// loop OMIT
 	go func() {
 		for {
 			run.Lock()
 			run.winnerFound = false
 			run.Unlock()
-			getNewBlock()
+			getNewBlock()                     // HL
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
 
 			fmt.Printf("\n--------------------\nNew race!\n")
-			stop.Add(1)   // prep channel for getcancels
-			close(run.ch) // start our miners
+			stop.Add(1)   // HL
+			close(run.ch) // HL
 		}
 	}()
-
+	// pool OMIT
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
 	g.Serve(lis)
