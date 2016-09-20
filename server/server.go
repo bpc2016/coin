@@ -60,11 +60,11 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 
 // nigol OMIT
 
-// GetWork implements cpb.CoinServer, synchronises start of miners, hands out work
+// GetWork implements cpb.CoinServer, synchronises start of miners, hands out work gw OMIT
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	debugF("Work request: %+v\n", in)
-	signIn <- in.Name // register
-	<-run.ch          // all must wait, start when this is closed
+	signIn <- in.Name // HL
+	<-run.ch          // HL
 
 	block.Lock()
 	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
@@ -72,6 +72,7 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	return &cpb.GetWorkReply{Work: work}, nil
 }
 
+// wg OMIT
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	run.Lock()
@@ -80,28 +81,26 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a winner
-	run.winnerFound = true // until call for new run resets this one
+	run.winnerFound = true // HL
 	resultchan <- *soln.Win
 	for i := 0; i < *numMiners; i++ {
 		<-signOut
 	}
-	run.ch = make(chan struct{}) // reset getwork start
-	stop.Done()                  // issue cancellation to our clients
+	run.ch = make(chan struct{}) // HL
+	stop.Done()                  // HL
 	return &cpb.AnnounceReply{Ok: true}, nil
 }
 
-// GetCancel blocks until a valid stop condition then broadcasts a cancel instruction : implements cpb.CoinServer
+// cancel OMIT
+// GetCancel broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	signOut <- in.Name // register
-	stop.Wait()        // wait for valid solution  OR timeout
+	signOut <- in.Name // HL
+	stop.Wait()        // HL
 	serv := *index
-	return &cpb.GetCancelReply{Index: uint32(serv)}, nil
+	return &cpb.GetCancelReply{Index: uint32(serv)}, nil // HL
 }
 
-type privchannel struct {
-	sync.Mutex
-	ch chan struct{}
-}
+// lecnac OMIT
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
@@ -154,8 +153,6 @@ func main() {
 	lis, err := net.Listen("tcp", port)
 	fatalF("failed to listen", err)
 
-	s := new(server)
-
 	signIn = make(chan string, *numMiners)  // register incoming miners
 	signOut = make(chan string, *numMiners) // register miners receipt of cancel instructions
 	blockchan = make(chan string, 1)        // transfer block data
@@ -178,6 +175,7 @@ func main() {
 		}
 	}()
 	// pool OMIT
+	s := new(server)
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
 	g.Serve(lis)
