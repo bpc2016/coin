@@ -19,12 +19,12 @@ var (
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
-// logger type is for the users login details
+// logger type is for the users login details logger OMIT
 type logger struct {
 	sync.Mutex
 	nextID   int
 	loggedIn map[string]int
-}
+} // loggerout OMIT
 
 type blockdata struct {
 	sync.Mutex
@@ -37,17 +37,16 @@ type lockable struct {
 	ch          chan struct{}
 }
 
-var (
+var ( // users OMIT
 	users   logger
-	block   blockdata // models the block information - basis of 'work'
+	block   blockdata // models the block information - basis of 'work'  usersout OMIT
 	run     lockable
 	signIn  chan string // for registering users in getwork
 	signOut chan string // for registering leaving users in getcancel
 	stop    sync.WaitGroup
 )
 
-// login OMIT
-// Login implements cpb.CoinServer
+// Login implements cpb.CoinServer login OMIT
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
 	defer users.Unlock()

@@ -99,6 +99,10 @@ The following command  in the /service directory invokes the Go proto compiler:
 
 .code service/coin.pb.go /^type CoinServer interface/,/LoginReply, error\)/
 is generally more substantial:
+
+.code server/server.go /logger OMIT/,/loggerout OMIT/
+
+.code server/server.go /users OMIT/,/usersout OMIT/
  
 .code server/server.go /login OMIT/,/nigol OMIT/
 

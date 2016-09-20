@@ -279,12 +279,12 @@
        id="text4003"
        y="239.83623"
        x="-528.29712"
-       style="font-size:18px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+       style="font-style:normal;font-weight:normal;font-size:18px;line-height:125%;font-family:Sans;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none"
        xml:space="preserve"><tspan
          y="239.83623"
          x="-528.29712"
          id="tspan4005"
-         sodipodi:role="line">start.Done() </tspan></text>
+         sodipodi:role="line">close(run.ch) </tspan></text>
     <path
        style="fill:none;stroke:#000000;stroke-width:1.5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none;marker-end:url(#Arrow1Mend)"
        d="m 235.1449,546.18366 c 28.65377,159.11156 29.6218,156.44947 29.6218,156.44947 l 0.16199,0.94708"
