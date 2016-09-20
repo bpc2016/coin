@@ -114,9 +114,7 @@ func main() {
 	defer conn.Close()
 
 	c := cpb.NewCoinClient(conn)
-
 	name := *user
-
 	// Contact the server and print out its response.
 	myID = login(c, name)
 
