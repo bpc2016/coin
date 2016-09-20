@@ -119,6 +119,61 @@ Note how this works
 
 - the server line has the first three events duplicated, but the cycle is demarcated
 - the bold red bars are the mining search operations
-- this server has two clients, the second being a conductor
+- this server has two clients, the second being *the* conductor
 
-: both server and clients continuously run loops (vertical dashed lines)
+
+* Server  - main()
+
+Looks so ...
+
+    func main() {
+        flag.Parse()
+        users.loggedIn = make(map[string]int)
+        users.nextID = -1
+        *numMiners++ // to include the Conductor (EXTERNAL)
+
+        port := fmt.Sprintf(":%d", 50051+*index)
+        lis, err := net.Listen("tcp", port)
+        fatalF("failed to listen", err)
+
+                        :
+                        
+
+- reads flags, which includes *numMiners* if = 4 then in fact we handle 5 since we also service the *conductor*,
+which also feed data from other clients, and the external network 
+- the *index* flag distinguishes this from other servers, sets the port 
+- *users* will track our clients
+
+* Server  - main()
+
+Then
+                    :
+
+        s := new(server)
+
+        signIn = make(chan string, *numMiners)
+        signOut = make(chan string, *numMiners)
+        run.ch = make(chan struct{}) // prepare for getwork start
+        blockchan = make(chan string, 1)
+        resultchan = make(chan cpb.Win)
+
+        go func() {
+            for {
+                run.Lock()
+                run.winnerFound = false
+                run.Unlock()
+                getNewBlock()
+                for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
+                    <-signIn
+                }
+
+                fmt.Printf("\n--------------------\nNew race!\n")
+                stop.Add(1)   // prep channel for getcancels
+                close(run.ch) // start our miners
+            }
+        }()
+
+        g := grpc.NewServer()
+        cpb.RegisterCoinServer(g, s)
+        g.Serve(lis)
+    }

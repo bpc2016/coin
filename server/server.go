@@ -148,10 +148,10 @@ func main() {
 	flag.Parse()
 	users.loggedIn = make(map[string]int)
 	users.nextID = -1
-	*numMiners++ // to include the EXTERNAL
+	*numMiners++ // to include the Conductor (EXTERNAL)
 
 	port := fmt.Sprintf(":%d", 50051+*index)
-	lis, err := net.Listen("tcp", port) // RPC port - localhost?
+	lis, err := net.Listen("tcp", port)
 	fatalF("failed to listen", err)
 
 	s := new(server)
