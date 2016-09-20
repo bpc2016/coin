@@ -107,13 +107,13 @@ type server struct{}
 
 var blockchan chan string
 
-// IssueBlock receives the new block from frontend : implements cpb.CoinServer
+// IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- in.Block
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
-// this comes from this server's role with frontend as client
+// this comes from this server's role with Conductor as client
 func getNewBlock() {
 	temp := <-blockchan // note that this will block if EXTERNAL absent
 	block.Lock()
@@ -123,7 +123,7 @@ func getNewBlock() {
 
 var resultchan chan cpb.Win //string
 
-// GetResult sends back win to frontend : implements cpb.CoinServer
+// GetResult sends back win to Conductor : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan                             // wait for a result
 	fmt.Printf("sendresult: %d, %v\n", *index, result) // send this back to client

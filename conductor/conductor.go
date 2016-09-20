@@ -70,7 +70,7 @@ func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry c
 	fatalF("could not request result", err)
 
 	if res.Winner.Coinbase != "EXTERNAL" { // avoid echoes
-		declareWin(theWinner, lateEntry, res.Index, res.Winner.Coinbase, res.Winner.Nonce)
+		declareWin(theWinner, lateEntry, res.Index, res.Winner.Coinbase, res.Winner.Nonce) // HL
 	}
 }
 
@@ -79,14 +79,14 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 	select {
 	case <-lateEntry: // we already have declared a winner, do nothing
 	default:
-		close(lateEntry)
+		close(lateEntry) // HL
 		str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
 		if index == uint32(*numServers) {
-			str += "external"
+			str += "external" // HL
 		} else {
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
 		}
-		theWinner <- str
+		theWinner <- str // HL
 		for i, c := range servers {
 			if uint32(i) == index {
 				continue

@@ -111,9 +111,11 @@ is generally more substantial:
 
 * Server
 
+* Server flow
+
 .image server.svg
 
-* Server ...ctd
+* Server flow - remarks
 
 Note how this works
 
@@ -204,7 +206,47 @@ At the same time that *main()* starts a run, it also refreshes the *stop* waitgr
 
 The Annouce goroutine is triggered by a client declaring success
 
-.code ../server/server.go /wg OMIT/,/cancel OMIT/
+.code ../server/server.go /\/\/ Announce/,/^}/
 
 - a request coming after *run.winnerFound* is rejected with Ok=false
 - the *stop.Done()* frees the getCancel replies to all clients
+
+* Server - IssueBlock()
+
+Conductor-specific communications 
+
+.code ../server/server.go /func getNewBlock/,/^}/
+.code ../server/server.go /\/\/ IssueBlock/,/^}/
+
+- when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *GetNewBlock()* and restarts that cycle
+
+* Server - GetResult()
+
+The more critical Conductor-specific communication 
+
+.code ../server/server.go /\/\/ GetResult/,/^}/
+
+- uses the resultChan channels
+
+- corresponding code in the Conductor:
+
+.code ../conductor/conductor.go /func getResult/,/^}/
+
+
+* Server - GetResult() on the Conductor
+
+where *declareWin* does the following:
+
+- handles messages from servers as well as 'internal' ones gnerated by 'wins' in the 'external' search
+
+- returns the winning solution on channel *theWinner*
+
+- uses a select on channel *lateEntry* to redirect subsequent claims from other servers
+
+- confirms a win by sending a bogus win to the 'other' servers
+
+- uses index = numServers to send this win in case of an external win, this time to *all* servers
+
+* Server - GetResult() on the Conductor ...
+
+.code ../conductor/conductor.go /func declareWin/,/^}/
