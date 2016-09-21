@@ -118,31 +118,31 @@ func main() {
 	// Contact the server and print out its response.
 	myID = login(c, name)
 
-	// main cycle
+	// main cycle OMIT
 	for {
 		fmt.Printf("Fetching work %s ..\n", name)
-		// get ready, get set ... this needs to block
-		work := signUp(c, name)
+		work := signUp(c, name) // HL
 
-		stopLooking := make(chan struct{}, 1) // for search
-		endLoop := make(chan struct{}, 1)     // for this loop
+		stopLooking := make(chan struct{}, 1) // HL
+		endLoop := make(chan struct{}, 1)     // HL
 		// look out for cancellation
-		go getCancel(c, name, stopLooking, endLoop)
+		go getCancel(c, name, stopLooking, endLoop) // HL
 		// search blocks
-		theNonce, ok := search(work, stopLooking)
-		if ok {
+		theNonce, ok := search(work, stopLooking) // HL
+
+		if ok { // we completed search
 			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-			win := annouceWin(c, theNonce, work.Coinbase)
+			win := annouceWin(c, theNonce, work.Coinbase) // HL
+
 			if win { // it's possible that my winning nonce was late!
 				fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
 			}
 		}
 
 		<-endLoop // wait here for cancel from server
-
 		fmt.Printf("-----------------------\n")
 	}
-
+	// main end OMIT
 }
 
 // utilities

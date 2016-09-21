@@ -226,7 +226,7 @@ The more critical Conductor-specific communication
 
 .code ../server/server.go /\/\/ GetResult/,/^}/
 
-- uses the resultChan channels
+- uses the *resultChan* channel
 
 - corresponding code in the Conductor:
 
@@ -250,3 +250,24 @@ where *declareWin* does the following:
 * Server - GetResult() on the Conductor ...
 
 .code ../conductor/conductor.go /func declareWin/,/^}/
+
+* Client
+
+* Client flow
+
+this is the image
+
+* Client - main()
+
+- client invokes a *GetWork* request, wrapped in *signUp*
+- the response is a signal to start the *search*, which, together with *getCancel* are called with channels *stopLooking* and *endLoop*
+- both channels are buffered, with capacity 1 and filled when getCancel returns
+- at which point search is aborted and the main loop ended
+- it is also possible for *search* to return with a solution, before stopLooking fills
+- then  *announceWin* calls the *Announce* request to the server
+- this time, the  loop waits for a subsequent cancellation from the server - via endLoop
+
+* Client main ()
+
+.code ../client/client.go /main cycle OMIT/,/main end OMIT/
+
