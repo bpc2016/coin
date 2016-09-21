@@ -176,7 +176,8 @@ The main loop is inside the following anonymous goroutine:
 
 .code ../server/server.go /go func\(\) \{/,/}\(\)/
 
-- loop start with waiting for a new block from the conductor
+- loop starts with waiting for a new block from the *Conductor*
+- *run.winnerFound*=*false* resets the test for first sight of a winning solution 
 - *stop.Add(1)* refreshes a sync.Waitgroup in the *getCancel* goroutine
 - *close(run.ch)* removes a block and synchronises the start of each run
 

@@ -145,7 +145,7 @@ func main() {
 
 	go func() {
 		for {
-			block.data = <-blockchan          // note that this will block if EXTERNAL absent
+			block.data = <-blockchan          // HL
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
