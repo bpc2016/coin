@@ -110,9 +110,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 // this comes from this server's role with Conductor as client
 func getNewBlock() {
 	temp := <-blockchan // note that this will block if EXTERNAL absent
-	block.Lock()
 	block.data = temp
-	block.Unlock()
 }
 
 var resultchan chan cpb.Win //string
