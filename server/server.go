@@ -19,31 +19,31 @@ var (
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
-// logger type is for the users login details
-type logger struct {
+type lockMap struct {
 	sync.Mutex
 	nextID   int
 	loggedIn map[string]int
 }
 
-type blockdata struct {
+type lockString struct {
 	sync.Mutex
 	data string
 }
 
-type lockable struct {
+type lockChan struct {
 	sync.Mutex
 	winnerFound bool
 	ch          chan struct{}
 }
 
 var (
-	users   logger
-	block   blockdata // models the block information - basis of 'work'
-	run     lockable
-	signIn  chan string // for registering users in getwork
-	signOut chan string // for registering leaving users in getcancel
-	stop    sync.WaitGroup
+	users     lockMap
+	block     lockString     // models the block information - basis of 'work'
+	run       lockChan       // channel that controls start of run
+	signIn    chan string    // for registering users in getwork
+	signOut   chan string    // for registering leaving users in getcancel
+	stop      sync.WaitGroup // control cancellation issue
+	blockchan chan string    // for incoming block
 )
 
 // Login implements cpb.CoinServer
@@ -99,8 +99,6 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 // server is used to implement cpb.CoinServer.
 type server struct{}
 
-var blockchan chan string
-
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- in.Block
@@ -151,13 +149,10 @@ func main() {
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
-			run.Lock()
-			run.winnerFound = false
-			run.Unlock()
-
 			fmt.Printf("\n--------------------\nNew race!\n")
-			stop.Add(1)   // HL
-			close(run.ch) // HL
+			run.winnerFound = false // HL
+			stop.Add(1)             // HL
+			close(run.ch)           // HL
 		}
 	}()
 	s := new(server)
