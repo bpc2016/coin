@@ -9,9 +9,9 @@ busiso.chisala@gmail.com
 
 The setup consists 
 
-- a small cluster of *servers* (a single location?)
+- a small cluster of *servers*
 
-- many stawberry Pis as *clients* (across the globe)
+- many Strawberry Pis as *clients* (across the globe)
 
 - server, client software written in Go
 
@@ -20,13 +20,13 @@ The setup consists
 - users broadcast *transactions* to the bitcoin peer-to-peer network
 - mining operation gathers a set of transactions to form potential  *next block*
 - miner searches for a uint32 'nonce' determined by 
-    - block contents 
-    - going difficulty level
+    block contents 
+    going difficulty level
 - if found, this solution is broadcast and the block tops the *blockchain*
-- miner earns a reward in *coinbase bitcoin* (25BTC, this year goes down to 12.5)
+- miner earns a reward in *coinbase*bitcoin* (25BTC, this year goes down to 12.5)
 - even if not found, _repeat_
 
-*Note:* each loop is expected to last about ten minutes. 
+*Note :* each loop is expected to last about ten minutes. 
 
 
 * Pooled Mining
