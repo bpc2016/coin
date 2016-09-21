@@ -215,10 +215,9 @@ The Annouce goroutine is triggered by a client declaring success
 
 Conductor-specific communications 
 
-.code ../server/server.go /func getNewBlock/,/^}/
 .code ../server/server.go /\/\/ IssueBlock/,/^}/
 
-- when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *GetNewBlock()* and restarts that cycle
+- when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *block.data*=*<-blockchan* and restarts that cycle
 
 * Server - GetResult()
 
