@@ -107,12 +107,6 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
-// this comes from this server's role with Conductor as client
-func getNewBlock() {
-	temp := <-blockchan // note that this will block if EXTERNAL absent
-	block.data = temp
-}
-
 var resultchan chan cpb.Win //string
 
 // GetResult sends back win to Conductor : implements cpb.CoinServer
@@ -153,7 +147,7 @@ func main() {
 
 	go func() {
 		for {
-			getNewBlock()                     // HL
+			block.data = <-blockchan          // note that this will block if EXTERNAL absent
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
