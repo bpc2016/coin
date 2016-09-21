@@ -253,10 +253,6 @@ where *declareWin* does the following:
 
 * Client
 
-* Client flow
-
-this is the image
-
 * Client - main()
 
 - client invokes a *GetWork* request, wrapped in *signUp*
@@ -267,7 +263,7 @@ this is the image
 - then  *announceWin* calls the *Announce* request to the server
 - this time, the  loop waits for a subsequent cancellation from the server - via endLoop
 
-* Client main ()
+* Client - main () code
 
 .code ../client/client.go /main cycle OMIT/,/main end OMIT/
 
