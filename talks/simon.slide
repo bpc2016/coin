@@ -107,7 +107,7 @@ is generally more substantial:
         }
         var users   logger
  
-.code ../server/server.go /login OMIT/,/nigol OMIT/
+.code ../server/server.go /\/\/ Login/,/^}/
 
 * Server
 
@@ -174,7 +174,7 @@ we later fire up the server with
 
 The main loop is inside the following anonymous goroutine:
 
-.code ../server/server.go /loop OMIT/,/pool OMIT/
+.code ../server/server.go /go func\(\) \{/,/}\(\)/
 
 - *getNewBlock()* waits for a new block from the conductor
 - *stop.Add(1)* refreshes a sync.Waitgroup in the *getCancel* goroutine
@@ -184,7 +184,7 @@ The main loop is inside the following anonymous goroutine:
 
 Every client, on each work cycle, issues a request to this goroutine
 
-.code ../server/server.go /gw OMIT/,/wg OMIT/
+.code ../server/server.go /\/\/ GetWork/,/^}/
 
 - registration allows *main()* to ensure that all clients have reached this point
 - each *GetWork* blocks until *close(run.ch)* is called
@@ -195,7 +195,7 @@ Every client, on each work cycle, issues a request to this goroutine
 
 At the same time that *main()* starts a run, it also refreshes the *stop* waitgroup used by GatCancel
 
-.code ../server/server.go /cancel OMIT/,/lecnac OMIT/
+.code ../server/server.go /\/\/ GetCancel/,/^}/
 
 - each client runs a getcancel request goroutine which allows notification of when to terminate searching
 - the Conductor also 'searches' - on behalf of external miners

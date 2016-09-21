@@ -46,7 +46,7 @@ var (
 	stop    sync.WaitGroup
 )
 
-// Login implements cpb.CoinServer login OMIT
+// Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
 	defer users.Unlock()
@@ -58,9 +58,7 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
-// nigol OMIT
-
-// GetWork implements cpb.CoinServer, synchronises start of miners, hands out work gw OMIT
+// GetWork implements cpb.CoinServer, synchronises start of miners, hands out work
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
 	debugF("Work request: %+v\n", in)
 	signIn <- in.Name // HL
@@ -72,7 +70,6 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	return &cpb.GetWorkReply{Work: work}, nil
 }
 
-// wg OMIT
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	run.Lock()
@@ -91,7 +88,6 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	return &cpb.AnnounceReply{Ok: true}, nil
 }
 
-// cancel OMIT
 // GetCancel broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	signOut <- in.Name // HL
@@ -99,8 +95,6 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 	serv := *index
 	return &cpb.GetCancelReply{Index: uint32(serv)}, nil // HL
 }
-
-// lecnac OMIT
 
 // server is used to implement cpb.CoinServer.
 type server struct{}
@@ -158,23 +152,22 @@ func main() {
 	blockchan = make(chan string, 1)        // transfer block data
 	run.ch = make(chan struct{})            // signal to start mining
 	resultchan = make(chan cpb.Win)         // transfer solution data
-	// loop OMIT
+
 	go func() {
 		for {
-			run.Lock()
-			run.winnerFound = false
-			run.Unlock()
 			getNewBlock()                     // HL
 			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
 				<-signIn
 			}
+			run.Lock()
+			run.winnerFound = false
+			run.Unlock()
 
 			fmt.Printf("\n--------------------\nNew race!\n")
 			stop.Add(1)   // HL
 			close(run.ch) // HL
 		}
 	}()
-	// pool OMIT
 	s := new(server)
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
