@@ -140,7 +140,7 @@ func main() {
 		theWinner := make(chan string, *numServers)
 		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
 
-		for _, c := range servers { // will need to use teh index!!
+		for _, c := range servers { // will need to use the index!!
 			go func(c cpb.CoinClient, newBlock string,
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
