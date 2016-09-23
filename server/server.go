@@ -14,11 +14,15 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	allowedTime          = 2  // "number of seconds before miner declared NOT alive"
+	allowedConductorTime = 20 // number of seconds for the conductor
+)
+
 var (
-	index       = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
-	numMiners   = flag.Int("miners", 3, "number of miners")       // DOESNT include the external one
-	allowedTime = flag.Int("alive", 2, "number of seconds before miner declared NOT alive")
-	debug       = flag.Bool("d", false, "debug mode")
+	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
+	numMiners = flag.Int("miners", 3, "number of miners")       // DOESNT include the external one
+	debug     = flag.Bool("d", false, "debug mode")
 )
 
 type lockMap struct {
@@ -83,7 +87,7 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	run.winnerFound = true // HL
 	resultchan <- *soln.Win
 	fmt.Println("starting signout numminers = ", *numMiners)
-	WaitFor(signOut, false)
+	WaitFor(signOut, "out")
 	run.ch = make(chan struct{}) // HL
 	stop.Done()                  // HL
 	return &cpb.AnnounceReply{Ok: true}, nil
@@ -129,14 +133,13 @@ func debugF(format string, args ...interface{}) {
 }
 
 // WaitFor allows for the loss of a miners
-func WaitFor(sign chan string, in bool) {
+func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool)
 	count := 1
-	alive[<-sign] = true // we need at least one!
-	// the rest ...
+	alive[<-sign] = true // we need at least one! ... then the rest ...
 	for i := 1; i < *numMiners; i++ {
 		select {
-		case <-time.After(time.Duration(*allowedTime) * time.Second): // exit, time is up
+		case <-time.After(allowedTime * time.Second): // exit, time is up
 			goto done
 		case c := <-sign:
 			alive[c] = true
@@ -144,19 +147,15 @@ func WaitFor(sign chan string, in bool) {
 		}
 	}
 done:
-	dir := "out"
-	if in {
-		dir = "in"
-		if count < *numMiners {
-			for name := range users.loggedIn {
-				if !alive[name] {
-					fmt.Printf("DEAD: %s\n", name)
-					delete(users.loggedIn, name)
-				}
+	if direction == "in" && count < *numMiners {
+		for name := range users.loggedIn {
+			if !alive[name] {
+				fmt.Printf("DEAD: %s\n", name)
+				delete(users.loggedIn, name)
 			}
 		}
 	}
-	fmt.Printf("miners %s = %d\n", dir, count)
+	fmt.Printf("miners %s = %d\n", direction, count)
 }
 
 func main() {
@@ -177,8 +176,20 @@ func main() {
 
 	go func() {
 		for {
-			block.data = <-blockchan // HL
-			WaitFor(signIn, true)    // HL
+			for {
+				select {
+				case block.data = <-blockchan: // HL
+					goto start
+				case <-time.After(allowedConductorTime * time.Second):
+					_, exists := users.loggedIn["EXTERNAL"]
+					if exists {
+						delete(users.loggedIn, "EXTERNAL")
+					}
+					fmt.Println("Need a live conductor!")
+				}
+			}
+		start:
+			WaitFor(signIn, "in") // HL
 			fmt.Printf("\n--------------------\nNew race!\n")
 			run.winnerFound = false // HL
 			stop.Add(1)             // HL
