@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -80,9 +81,11 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	// we have a winner
 	run.winnerFound = true // HL
 	resultchan <- *soln.Win
-	for i := 0; i < *numMiners; i++ {
-		<-signOut
-	}
+	fmt.Println("starting signout numminers = ", *numMiners)
+	// for i := 0; i < *numMiners; i++ {
+	// 	<-signOut
+	// }
+	WaitFor(signOut, false)
 	run.ch = make(chan struct{}) // HL
 	stop.Done()                  // HL
 	return &cpb.AnnounceReply{Ok: true}, nil
@@ -127,6 +130,36 @@ func debugF(format string, args ...interface{}) {
 	}
 }
 
+// WaitFor allows for the loss of a miners
+func WaitFor(sign chan string, in bool) {
+	alive := make(map[string]bool)
+	count := 1
+	alive[<-sign] = true // we need at least one!
+	// the rest ...
+	for i := 1; i < *numMiners; i++ {
+		select {
+		case <-time.After(2 * time.Second): // exit, time is up
+			goto done
+		case c := <-sign:
+			alive[c] = true
+			count++
+		}
+	}
+done:
+	dir := "out"
+	if in {
+		dir = "in"
+		if count < *numMiners {
+			for name := range users.loggedIn {
+				if !alive[name] {
+					fmt.Printf("DEAD: %s\n", name)
+				}
+			}
+		}
+	}
+	fmt.Printf("miners %s = %d\n", dir, count)
+}
+
 func main() {
 	flag.Parse()
 	users.loggedIn = make(map[string]int)
@@ -145,10 +178,11 @@ func main() {
 
 	go func() {
 		for {
-			block.data = <-blockchan          // HL
-			for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
-				<-signIn
-			}
+			block.data = <-blockchan // HL
+			// for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
+			// 	<-signIn
+			// }
+			WaitFor(signIn, true)
 			fmt.Printf("\n--------------------\nNew race!\n")
 			run.winnerFound = false // HL
 			stop.Add(1)             // HL
