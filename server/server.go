@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
-	numMiners = flag.Int("miners", 3, "number of miners")       // DOESNT include the external one
-	debug     = flag.Bool("d", false, "debug mode")
+	index       = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
+	numMiners   = flag.Int("miners", 3, "number of miners")       // DOESNT include the external one
+	allowedTime = flag.Int("alive", 2, "number of seconds before miner declared NOT alive")
+	debug       = flag.Bool("d", false, "debug mode")
 )
 
 type lockMap struct {
@@ -82,9 +83,6 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	run.winnerFound = true // HL
 	resultchan <- *soln.Win
 	fmt.Println("starting signout numminers = ", *numMiners)
-	// for i := 0; i < *numMiners; i++ {
-	// 	<-signOut
-	// }
 	WaitFor(signOut, false)
 	run.ch = make(chan struct{}) // HL
 	stop.Done()                  // HL
@@ -138,7 +136,7 @@ func WaitFor(sign chan string, in bool) {
 	// the rest ...
 	for i := 1; i < *numMiners; i++ {
 		select {
-		case <-time.After(2 * time.Second): // exit, time is up
+		case <-time.After(time.Duration(*allowedTime) * time.Second): // exit, time is up
 			goto done
 		case c := <-sign:
 			alive[c] = true
@@ -153,6 +151,7 @@ done:
 			for name := range users.loggedIn {
 				if !alive[name] {
 					fmt.Printf("DEAD: %s\n", name)
+					delete(users.loggedIn, name)
 				}
 			}
 		}
@@ -179,10 +178,7 @@ func main() {
 	go func() {
 		for {
 			block.data = <-blockchan // HL
-			// for i := 0; i < *numMiners; i++ { // loop blocks here until miners are ready
-			// 	<-signIn
-			// }
-			WaitFor(signIn, true)
+			WaitFor(signIn, true)    // HL
 			fmt.Printf("\n--------------------\nNew race!\n")
 			run.winnerFound = false // HL
 			stop.Add(1)             // HL
