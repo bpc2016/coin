@@ -18,7 +18,7 @@ The setup consists
 * Bitcoin Mining
 
 - users broadcast *transactions* to the bitcoin peer-to-peer network
-- mining operation gathers a set of transactions to form potential  *next block*
+- mining operation gathers a set of transactions to form potential  *next*block*
 - miner searches for a uint32 'nonce' determined by 
     block contents 
     going difficulty level
@@ -283,3 +283,13 @@ where *declareWin* does the following:
 
 .code ../client/client.go /main cycle OMIT/,/main end OMIT/
 
+* Conductor
+
+* Conductor - Intro
+
+Presently there is only one Conductor that connects to a set of servers, as well as the outside world.
+
+- it runs sofware similar to the clients, except that it connects to more than one server and implements a few more interfaces
+- to each server, the conductor presents itself with username *EXTERNAL*
+- the servers send their winners (if any) to the conductor, which is responsible for determining the actual winner
+- the search it runs models declaring a winner in the external network, so is implemented here as a timeout  
