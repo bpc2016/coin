@@ -152,7 +152,7 @@ func main() {
 				// get ready, get set ... this needs to block
 				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
 				fatalF("could not get work", err)
-				
+
 				workChan <- r.Work // HL
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
