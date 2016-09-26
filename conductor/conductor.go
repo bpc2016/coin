@@ -145,8 +145,8 @@ func main() {
 		}
 
 		defer conn.Close()
-		c := cpb.NewCoinClient(conn)
-		login(c, "EXTERNAL")
+		c := cpb.NewCoinClient(conn) // note that we do not login!
+		// login(c, "EXTERNAL")
 		servers = append(servers, c)
 		alive[c] = true
 	}

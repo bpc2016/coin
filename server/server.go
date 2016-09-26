@@ -107,6 +107,7 @@ type server struct{}
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- in.Block
+	users.loggedIn["EXTERNAL"] = 1
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -149,7 +150,7 @@ func WaitFor(sign chan string, direction string) {
 done:
 	if direction == "in" && count < *numMiners {
 		for name := range users.loggedIn {
-			if !alive[name] {
+			if !alive[name] && name != "EXTERNAL" {
 				fmt.Printf("DEAD: %s\n", name)
 				delete(users.loggedIn, name)
 			}
@@ -181,10 +182,10 @@ func main() {
 				case block.data = <-blockchan: // HL
 					goto start
 				case <-time.After(allowedConductorTime * time.Second):
-					_, exists := users.loggedIn["EXTERNAL"]
-					if exists {
-						delete(users.loggedIn, "EXTERNAL")
-					}
+					// _, exists := users.loggedIn["EXTERNAL"]
+					// if exists {
+					// 	delete(users.loggedIn, "EXTERNAL")
+					// }
 					fmt.Println("Need a live conductor!")
 				}
 			}

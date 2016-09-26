@@ -14,48 +14,31 @@ import (
 )
 
 var (
-	debug  = flag.Bool("d", false, "debug mode")
-	tosses = flag.Int("t", 2, "number of tosses")
-	user   = flag.String("u", "sole", "the client name")
-	server = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
-
-	myID uint32
+	debug       = flag.Bool("d", false, "debug mode")
+	tosses      = flag.Int("t", 2, "number of tosses")
+	user        = flag.String("u", "sole", "the client name")
+	server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
+	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
+	myID        uint32
+	serverAlive bool
 )
-
-// login to server c, returns an id
-func login(c cpb.CoinClient, name string) uint32 {
-	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name}) // HL
-	fatalF("could not login", err)
-
-	log.Printf("Login successful. Assigned id: %d\n", r.Id)
-	return r.Id
-}
-
-// sign up with server c
-func signUp(c cpb.CoinClient, name string) *cpb.Work {
-	r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
-	fatalF("could not get work", err)
-
-	debugF("Got work:\n%s\n", r.Work)
-	return r.Work
-}
 
 // annouceWin is what causes the server to issue a cancellation
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
-	fatalF("could not announce win", err)
-
+	if skipF("could not announce win", err) {
+		return false
+	}
 	return r.Ok
 }
 
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop chan struct{}) {
 	_, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
-	fatalF("could not request cancellation", err)
-
-	stopLooking <- struct{}{} // stop search
-	endLoop <- struct{}{}     // quit loop
+	skipF("could not request cancellation", err) // drop through
+	stopLooking <- struct{}{}                    // stop search
+	endLoop <- struct{}{}                        // quit loop
 }
 
 // dice
@@ -107,49 +90,83 @@ func main() {
 	flag.Parse()
 
 	address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
-	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
-	fatalF("did not connect", err)
-
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
 	defer conn.Close()
 
 	c := cpb.NewCoinClient(conn)
 	name := *user
-	// Contact the server and print out its response.
-	myID = login(c, name)
+	serverAlive = true
+	countdown := 0
 
-	// main cycle OMIT
 	for {
-		fmt.Printf("Fetching work %s ..\n", name)
-		work := signUp(c, name) // HL
-
-		stopLooking := make(chan struct{}, 1) // HL
-		endLoop := make(chan struct{}, 1)     // HL
-		// look out for cancellation
-		go getCancel(c, name, stopLooking, endLoop) // HL
-		// search blocks
-		theNonce, ok := search(work, stopLooking) // HL
-
-		if ok { // we completed search
-			fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-			win := annouceWin(c, theNonce, work.Coinbase) // HL
-
-			if win { // it's possible that my winning nonce was late!
-				fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
+		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name}) // HL
+		if skipF("could not login", err) {
+			time.Sleep(5 * time.Second)
+			countdown++
+			if countdown > *maxSleep {
+				log.Fatalf("%s\n", "Server dead ... quitting")
 			}
+			continue
+		} else if !serverAlive {
+			countdown = 0
+			serverAlive = true // we are back
 		}
+		log.Printf("Login successful. Assigned id: %d\n", r.Id)
+		myID = r.Id
+		// main cycle OMIT
+		for {
+			var (
+				work                 *cpb.Work
+				stopLooking, endLoop chan struct{}
+				theNonce             uint32
+				ok                   bool
+			)
+			fmt.Printf("Fetching work %s ..\n", name)
+			r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
+			if skipF("could not get work", err) {
+				goto pastit
+			}
+			work = r.Work                        // HL
+			stopLooking = make(chan struct{}, 1) // HL
+			endLoop = make(chan struct{}, 1)     // HL
+			// look out for cancellation
+			go getCancel(c, name, stopLooking, endLoop) // HL
+			// search blocks
+			theNonce, ok = search(work, stopLooking) // HL
+			if ok {                                  // we completed search
+				fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+				win := annouceWin(c, theNonce, work.Coinbase) // HL
 
-		<-endLoop // wait here for cancel from server
-		fmt.Printf("-----------------------\n")
+				if win { // it's possible that my winning nonce was late!
+					fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
+				}
+			}
+
+			<-endLoop // wait here for cancel from server
+			fmt.Printf("-----------------------\n")
+		}
+		// main end OMIT
+	pastit:
 	}
-	// main end OMIT
 }
 
 // utilities
-func fatalF(message string, err error) {
+func skipF(message string, err error) bool {
 	if err != nil {
-		log.Fatalf(message+": %v", err)
+		if *debug {
+			log.Printf(message+": %v", err)
+		} else {
+			log.Println(message)
+		}
+		if serverAlive {
+			serverAlive = false
+		}
+		return true // we have skipped
 	}
+	return false
 }
 
 func debugF(format string, args ...interface{}) {
