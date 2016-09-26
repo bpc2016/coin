@@ -127,12 +127,6 @@ func skipF(c cpb.CoinClient, message string, err error) bool {
 	return false
 }
 
-func fatalF(message string, err error) {
-	if err != nil {
-		log.Fatalf(message+": %v", err)
-	}
-}
-
 func debugF(format string, args ...interface{}) {
 	if *debug {
 		log.Printf(format, args...)
@@ -146,7 +140,9 @@ func main() {
 	for index := 0; index < *numServers; index++ {
 		addr := fmt.Sprintf("localhost:%d", 50051+index)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
-		fatalF("fail to dial", err)
+		if err != nil {
+			log.Fatalf("fail to dial: %v", err)
+		}
 
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn)
