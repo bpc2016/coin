@@ -36,7 +36,7 @@ message GetWorkRequest {
   string name = 1;
 }
 
-// Announce request carries the same name as login
+// Announce request is a Win struct - coinbase + nonce
 message AnnounceRequest {
   Win win = 1;
 }
