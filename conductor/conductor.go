@@ -47,7 +47,9 @@ done:
 // login to server c, returns a id
 func login(c cpb.CoinClient, name string) uint32 {
 	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
-	fatalF("could not login", err)
+	if skipF(c, "could not login", err) {
+		return 0
+	}
 
 	log.Printf("Login successful. Assigned id: %d\n", r.Id)
 	return r.Id
@@ -56,7 +58,9 @@ func login(c cpb.CoinClient, name string) uint32 {
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop chan struct{}) {
 	_, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
-	fatalF("could not request cancellation", err)
+	if skipF(c, "could not request cancellation", err) {
+		return
+	}
 
 	stopLooking <- struct{}{} // stop search
 	endLoop <- struct{}{}     // quit loop
@@ -67,7 +71,9 @@ var servers []cpb.CoinClient
 // getResult makes a blocking request to the server
 func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry chan struct{}) {
 	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
-	fatalF("could not request result", err)
+	if skipF(c, "could not request result", err) {
+		return
+	}
 
 	if res.Winner.Coinbase != "EXTERNAL" { // avoid echoes
 		declareWin(theWinner, lateEntry, res.Index, res.Winner.Coinbase, res.Winner.Nonce) // HL
@@ -88,7 +94,7 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 		}
 		theWinner <- str // HL
 		for i, c := range servers {
-			if uint32(i) == index {
+			if uint32(i) == index || !alive[c] {
 				continue
 			}
 			annouceWin(c, 99, "EXTERNAL") // bogus announcement
@@ -100,12 +106,27 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
 	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
-	fatalF("could not announce win", err)
+	if skipF(c, "could not announce win", err) {
+		return false
+	}
 
 	return r.Ok
 }
 
+var alive map[cpb.CoinClient]bool
+
 // utilities
+func skipF(c cpb.CoinClient, message string, err error) bool {
+	if err != nil {
+		log.Printf(message+": %v", err)
+		if alive[c] {
+			alive[c] = false
+		}
+		return true // we have skipped
+	}
+	return false
+}
+
 func fatalF(message string, err error) {
 	if err != nil {
 		log.Fatalf(message+": %v", err)
@@ -121,6 +142,7 @@ func debugF(format string, args ...interface{}) {
 func main() {
 	flag.Parse()
 
+	alive = make(map[cpb.CoinClient]bool)
 	for index := 0; index < *numServers; index++ {
 		addr := fmt.Sprintf("localhost:%d", 50051+index)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
@@ -130,6 +152,7 @@ func main() {
 		c := cpb.NewCoinClient(conn)
 		login(c, "EXTERNAL")
 		servers = append(servers, c)
+		alive[c] = true
 	}
 
 	for {
@@ -145,13 +168,19 @@ func main() {
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
 				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock})
-				fatalF("could not issue block", err)
+				if skipF(c, "could not issue block", err) {
+					return
+				}
 
 				// conductor handles results
 				go getResult(c, "EXTERNAL", theWinner, lateEntry)
 				// get ready, get set ... this needs to block
 				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
-				fatalF("could not get work", err)
+				if skipF(c, "could not get work", err) {
+					return
+				} else if !alive[c] {
+					alive[c] = true
+				}
 
 				workChan <- r.Work // HL
 				// in parallel - seek cancellation
@@ -159,7 +188,11 @@ func main() {
 			}(c, newBlock, stopLooking, endLoop, theWinner, lateEntry)
 		}
 
-		for i := 0; i < *numServers; i++ {
+		// for i := 0; i < *numServers; i++ { // TODO reduce numbers //
+		for c := range alive {
+			if !alive[c] {
+				continue
+			}
 			debugF("%+v\n", <-workChan)
 		}
 
@@ -172,7 +205,11 @@ func main() {
 				"external", theNonce)
 		}
 
-		for i := 0; i < *numServers; i++ {
+		// for i := 0; i < *numServers; i++ {
+		for c := range alive {
+			if !alive[c] {
+				continue
+			}
 			<-endLoop // wait for cancellation from each server
 		}
 
