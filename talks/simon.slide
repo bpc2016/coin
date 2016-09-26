@@ -92,7 +92,7 @@ The following command  in the /service directory invokes the Go proto compiler:
 
 - which we use in client/client.go
 
-.code ../client/client.go /\/\/ login/,/\", err\)/
+#.code ../client/client.go /\/\/ login/,/\", err\)/
 
 
 * Server side implementations
@@ -100,12 +100,12 @@ The following command  in the /service directory invokes the Go proto compiler:
 .code ../service/coin.pb.go /^type CoinServer interface/,/LoginReply, error\)/
 is generally more substantial:
 
-        type logger struct {
-            sync.Mutex
-            nextID   int
-            loggedIn map[string]int
+        type lockMap struct {
+	        sync.Mutex
+	        nextID   int
+	        loggedIn map[string]int
         }
-        var users   logger
+        var users   lockMap
  
 .code ../server/server.go /\/\/ Login/,/^}/
 
@@ -168,11 +168,10 @@ The main loop starts with waiting for a new block from the *Conductor*
 
 .code ../server/server.go /go func\(\) \{/,/}\(\)/
 
+- it repeatedly checks for the Conductor after *allowedConductorTime* seconds
 
 * Server - main() 
 
-- we first make sure that the conductor is online within *allowedConductorTime* seconds.A warning is issued and the test made again.
-- if the conductor previously logged in, we delete this and a new login is required later
 - the *WaitFor()* call (explained later) is a fancier form of the following:
         for i := 0; i < *numMiners; i++ { <-signIn }    // block until ALL are signed in
 - *run.winnerFound*=*false* resets the test for first sight of a winning solution 
@@ -196,6 +195,7 @@ then ...
 
 - if we have lost miners, delete their *users.loggedIn* entries, so they can rejoin later 
 - report the available numbers 
+- the Conductor is treated differently (EXTERNAL)
 
 * Server - GetWork()
 
@@ -271,7 +271,23 @@ where *declareWin* does the following:
 
 * Client - main()
 
-- client invokes a *GetWork* request, wrapped in *signUp*
+This is made of two cycles, the outer one, where login occurs :
+
+.code ../client/client.go /outer OMIT/,/main cycle OMIT/
+
+inner cycle goes in here ...
+
+.code ../client/client.go /main end OMIT/,/outerend OMIT/
+
+* Client - main() outer cycle
+
+- the *skipF* call checks whether there was an error and, if so, returns true. It also sets variable *serverAlive* to false 
+- this is repeated until *maxSleep* x 5 seconds have passed, after which the client exits
+- this allows for the server to be brought down while its clients wait  
+
+* Client - main() inner cycle
+
+- client invokes a *GetWork* request
 - the response is a signal to start the *search*, which, together with *getCancel* are called with channels *stopLooking* and *endLoop*
 - both channels are buffered, with capacity 1 and filled when getCancel returns
 - at which point search is aborted and the main loop ended
@@ -279,7 +295,7 @@ where *declareWin* does the following:
 - then  *announceWin* calls the *Announce* request to the server
 - this time, the  loop waits for a subsequent cancellation from the server - via endLoop
 
-* Client - main () code
+* Client - main () inner cycle code
 
 .code ../client/client.go /main cycle OMIT/,/main end OMIT/
 

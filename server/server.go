@@ -43,13 +43,14 @@ type lockChan struct {
 }
 
 var (
-	users     lockMap
-	block     lockString     // models the block information - basis of 'work'
-	run       lockChan       // channel that controls start of run
-	signIn    chan string    // for registering users in getwork
-	signOut   chan string    // for registering leaving users in getcancel
-	stop      sync.WaitGroup // control cancellation issue
-	blockchan chan string    // for incoming block
+	users      lockMap
+	block      lockString     // models the block information - basis of 'work'
+	run        lockChan       // channel that controls start of run
+	signIn     chan string    // for registering users in getwork
+	signOut    chan string    // for registering leaving users in getcancel
+	stop       sync.WaitGroup // control cancellation issue
+	blockchan  chan string    // for incoming block
+	resultchan chan cpb.Win   // for the winner decision
 )
 
 // Login implements cpb.CoinServer
@@ -107,11 +108,9 @@ type server struct{}
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- in.Block
-	users.loggedIn["EXTERNAL"] = 1
+	users.loggedIn["EXTERNAL"] = 1 // we login conductor here
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
-
-var resultchan chan cpb.Win //string
 
 // GetResult sends back win to Conductor : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
@@ -135,7 +134,7 @@ func debugF(format string, args ...interface{}) {
 
 // WaitFor allows for the loss of a miners
 func WaitFor(sign chan string, direction string) {
-	alive := make(map[string]bool)
+	alive := make(map[string]bool) // HL
 	count := 1
 	alive[<-sign] = true // we need at least one! ... then the rest ...
 	for i := 1; i < *numMiners; i++ {
@@ -182,10 +181,6 @@ func main() {
 				case block.data = <-blockchan: // HL
 					goto start
 				case <-time.After(allowedConductorTime * time.Second):
-					// _, exists := users.loggedIn["EXTERNAL"]
-					// if exists {
-					// 	delete(users.loggedIn, "EXTERNAL")
-					// }
 					fmt.Println("Need a live conductor!")
 				}
 			}

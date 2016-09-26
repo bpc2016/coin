@@ -100,17 +100,17 @@ func main() {
 	name := *user
 	serverAlive = true
 	countdown := 0
-
+	// outer OMIT
 	for {
 		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name}) // HL
-		if skipF("could not login", err) {
+		if skipF("could not login", err) {                                     // HL
 			time.Sleep(5 * time.Second)
 			countdown++
 			if countdown > *maxSleep {
-				log.Fatalf("%s\n", "Server dead ... quitting")
+				log.Fatalf("%s\n", "Server dead ... quitting") // HL
 			}
 			continue
-		} else if !serverAlive {
+		} else if !serverAlive { // HL
 			countdown = 0
 			serverAlive = true // we are back
 		}
@@ -118,16 +118,16 @@ func main() {
 		myID = r.Id
 		// main cycle OMIT
 		for {
-			var (
-				work                 *cpb.Work
-				stopLooking, endLoop chan struct{}
-				theNonce             uint32
-				ok                   bool
-			)
+			var ( // OMIT
+				work                 *cpb.Work     // OMIT
+				stopLooking, endLoop chan struct{} // OMIT
+				theNonce             uint32        // OMIT
+				ok                   bool          // OMIT
+			) // OMIT
 			fmt.Printf("Fetching work %s ..\n", name)
 			r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 			if skipF("could not get work", err) {
-				goto pastit
+				goto outercycle
 			}
 			work = r.Work                        // HL
 			stopLooking = make(chan struct{}, 1) // HL
@@ -139,8 +139,7 @@ func main() {
 			if ok {                                  // we completed search
 				fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 				win := annouceWin(c, theNonce, work.Coinbase) // HL
-
-				if win { // it's possible that my winning nonce was late!
+				if win {                                      // it's possible that my winning nonce was late!
 					fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
 				}
 			}
@@ -149,9 +148,9 @@ func main() {
 			fmt.Printf("-----------------------\n")
 		}
 		// main end OMIT
-	pastit:
+	outercycle:
 	}
-}
+} // outerend OMIT
 
 // utilities
 func skipF(message string, err error) bool {
