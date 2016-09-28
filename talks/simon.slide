@@ -2,12 +2,12 @@ Pooled Bitcoin Mining with Go
 A Distributed Solution
 
 Busiso Chisala
-Amateur Gopher 
+Gopher Wocheza
 busiso.chisala@gmail.com
 
 * Agenda
 
-The setup consists 
+We model the following setup:
 
 - a small cluster of *servers*
 
@@ -15,14 +15,15 @@ The setup consists
 
 - server, client software written in Go
 
+
 * Bitcoin Mining
 
-- users broadcast *transactions* to the bitcoin peer-to-peer network
-- mining operation gathers a set of transactions to form potential  *next*block*
+- bitcoin users broadcast *transactions* to the Bitcoin peer-to-peer network
+- competeing mining operations gather a set of transactions to form _the_  *next*block*
 - miner searches for a uint32 'nonce' determined by 
-    block contents 
-    going difficulty level
-- if found, this solution is broadcast and the block tops the *blockchain*
+         1) their chosen block's contents, and 
+        2) the going difficulty level
+- if found, this solution is broadcast and their candidate block tops the *blockchain*
 - miner earns a reward in *coinbase*bitcoin* (25BTC, this year goes down to 12.5)
 - even if not found, _repeat_
 
@@ -39,14 +40,16 @@ Mining is power intensive and requires a lot of computing effort
 
 * Distributed Pool
 
-Our mining model will collect together miners across the internet
+Our mining model will pool together miners across the internet, using three categories:
 
 - client miners 
-    mine,  get work from and send result to ..
+    mine bitcoin,  get work from and send result to ..
 - servers 
     responsible for groups of miners, get work from and  forward solution to ..
 - conductor
-    generates the block, runs a full node and talks to the bitcoin network
+    generates the block, adjudicates the 'winner' and talks to the bitcoin network
+
+Note that while the conductor need run a _full_Bitcoin_node_, the rest need not even have access to the outside network
 
 * Network Setup
 
@@ -59,6 +62,12 @@ Communication will involve bytes sequences and be bidirectional
 
 - gRPC 
 - Protobuf
+
+The most important function of the software is to synchronise search operations between the clients. This makes extensive use of
+
+- Go channels
+
+Note that we have endeavoured to address network latency and failure by allowing all players to die and subsequently rejoin
 
 * Proto file  /service/coin.proto
 
@@ -92,7 +101,7 @@ The following command  in the /service directory invokes the Go proto compiler:
 
 - which we use in client/client.go
 
-#.code ../client/client.go /\/\/ login/,/\", err\)/
+.code ../client/client.go /outer OMIT/,/HL/
 
 
 * Server side implementations
@@ -101,13 +110,13 @@ The following command  in the /service directory invokes the Go proto compiler:
 is generally more substantial:
 
         type lockMap struct {
-	        sync.Mutex
-	        nextID   int
-	        loggedIn map[string]int
+            sync.Mutex
+            nextID   int
+            loggedIn map[string]int
         }
         var users   lockMap
  
-.code ../server/server.go /\/\/ Login/,/^}/
+.code ../server/server.go /func.* Login/,/^}/
 
 * Server
 
@@ -117,37 +126,31 @@ is generally more substantial:
 
 * Server flow - remarks
 
-Note how this works
+This works thusly:
 
 - the server line has the first three events duplicated, but the cycle is demarcated
 - the bold red bars are the mining search operations
 - this server has two clients, the second being *the* conductor
+- client 1 announces a winning nonce
+- server acknowledges with a broadcast cancel which is what stops client 2
+- a separate response to getResult is sent to the *conductor* 
+- the conductor determines the absolute 'winner' among results from all servers (and forwards cancels, too)
+- conductor issues a fresh block to signal a fresh search effort
 
 
 * Server  - main()
 
-Looks so ...
+begins with ...
 
-    func main() {
-        flag.Parse()
-        users.loggedIn = make(map[string]int)
-        users.nextID = -1
-        *numMiners++ // to include the Conductor (EXTERNAL)
-
-        port := fmt.Sprintf(":%d", 50051+*index)
-        lis, err := net.Listen("tcp", port)
-        fatalF("failed to listen", err)
-
-                        :
+.code ../server/server.go /func main/,/port\)/
                         
-
-- reads flags, which includes *numMiners* if = 4 then in fact we handle 5 since we also service the *conductor*, which also feed data from other clients, and the external network 
-- the *index* flag distinguishes this from other servers, sets the port for our RPC comms 
-- *users* will track our clients
+- main() reads flags, including *numMiners* which, if = 4 means in fact we handle 5, since we also service the *conductor*, which also feeds us data from other clients, and the external network 
+- the integer flag *index* distinguishes this from other servers, sets the port for our RPC communications 
+- the map in *users* will track our clients
 
 * Server  - main()
 
-Then we  initialise several channels
+then we  initialise several channels
 
 .code ../server/server.go /signIn =/,/resultchan =/
         
@@ -168,12 +171,14 @@ The main loop starts with waiting for a new block from the *Conductor*
 
 .code ../server/server.go /go func\(\) \{/,/}\(\)/
 
-- it repeatedly checks for the Conductor after *allowedConductorTime* seconds
+- if a new block is not forthcoming, it repeatedly checks for the Conductor after *allowedConductorTime* seconds
 
 * Server - main() 
 
-- the *WaitFor()* call (explained later) is a fancier form of the following:
-        for i := 0; i < *numMiners; i++ { <-signIn }    // block until ALL are signed in
+- the *WaitFor()* call ( _explained_below_ ) is a fancier form of the following:
+        for i := 0; i < *numMiners; i++ { 
+            <-signIn  // block until ALL are signed in
+        }    
 - *run.winnerFound*=*false* resets the test for first sight of a winning solution 
 - *stop.Add(1)* refreshes a sync.Waitgroup in the *getCancel* goroutine
 - *close(run.ch)* removes a block and synchronises the start of search by all miners
@@ -182,10 +187,10 @@ The main loop starts with waiting for a new block from the *Conductor*
 
 This is called in two places: *main()* and *Announce()*. The first part:
 
-.code ../server/server.go /\/\/ WaitFor/,/^done/
+.code ../server/server.go /func.* WaitFor/,/^done/
 
 - *sign* is either channel *signIn* or *signOut*, respectively
-- any client after the first is given *allowedTime* seconds before being declared DEAD
+- any client after the first is given *allowedTime* seconds before being declared dead (_alive[c]=false_, the default)
 
 * Server - WaitFor()
 
@@ -195,13 +200,13 @@ then ...
 
 - if we have lost miners, delete their *users.loggedIn* entries, so they can rejoin later 
 - report the available numbers 
-- the Conductor is treated differently (EXTERNAL)
+- the Conductor is treated differently (it registers itself as user EXTERNAL)
 
 * Server - GetWork()
 
-Every client, on each work cycle, issues a request to this goroutine
+On each work cycle, every client (except the conductor) issues a request to this goroutine
 
-.code ../server/server.go /\/\/ GetWork/,/^}/
+.code ../server/server.go /func.* GetWork/,/^}/
 
 - registration allows *main()* to ensure that all clients have reached this point
 - each *GetWork* blocks until *close(run.ch)* is called
@@ -212,7 +217,7 @@ Every client, on each work cycle, issues a request to this goroutine
 
 At the same time that *main()* starts a run, it also refreshes the *stop* waitgroup used by GatCancel
 
-.code ../server/server.go /\/\/ GetCancel/,/^}/
+.code ../server/server.go /func.* GetCancel/,/^}/
 
 - each client runs a getcancel request goroutine which allows notification of when to terminate searching
 - the Conductor also 'searches' - on behalf of external miners
@@ -223,16 +228,17 @@ At the same time that *main()* starts a run, it also refreshes the *stop* waitgr
 
 The Annouce goroutine is triggered by a client declaring success
 
-.code ../server/server.go /\/\/ Announce/,/^}/
+.code ../server/server.go /func.* Announce/,/^}/
 
-- a request coming after *run.winnerFound* is rejected with Ok=false
+- a request coming after *winnerFound=true* is rejected with Ok=false
+- the win is sent to the *resultChan* channel, to alert the conductor
 - the *stop.Done()* frees the getCancel replies to all clients
 
 * Server - IssueBlock()
 
 Conductor-specific communications 
 
-.code ../server/server.go /\/\/ IssueBlock/,/^}/
+.code ../server/server.go /func.* IssueBlock/,/^}/
 
 - when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *block.data*=*<-blockchan* and restarts that cycle
 
@@ -240,7 +246,7 @@ Conductor-specific communications
 
 The more critical Conductor-specific communication 
 
-.code ../server/server.go /\/\/ GetResult/,/^}/
+.code ../server/server.go /func.* GetResult/,/^}/
 
 - uses the *resultChan* channel
 
@@ -255,7 +261,7 @@ where *declareWin* does the following:
 
 - handles messages from servers as well as 'internal' ones gnerated by 'wins' in the 'external' search
 
-- returns the winning solution on channel *theWinner*
+- returns the winning solution on channel *theWinner* to the terminal
 
 - uses a select on channel *lateEntry* to redirect subsequent claims from other servers
 
@@ -283,7 +289,7 @@ inner cycle goes in here ...
 
 - the *skipF* call checks whether there was an error and, if so, returns true. It also sets variable *serverAlive* to false 
 - this is repeated until *maxSleep* x 5 seconds have passed, after which the client exits
-- this allows for the server to be brought down while its clients wait  
+- this allows for the server to be brought down while its clients wait - if it revives in the period, all connections resume 
 
 * Client - main() inner cycle
 

@@ -61,7 +61,7 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 		return nil, errors.New("You are already logged in!")
 	}
 	users.nextID++
-	users.loggedIn[in.Name] = users.nextID
+	users.loggedIn[in.Name] = users.nextID // HL
 	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
 }
 
@@ -85,8 +85,8 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a winner
-	run.winnerFound = true // HL
-	resultchan <- *soln.Win
+	run.winnerFound = true  // HL
+	resultchan <- *soln.Win // HL
 	fmt.Println("starting signout numminers = ", *numMiners)
 	WaitFor(signOut, "out")
 	run.ch = make(chan struct{}) // HL
@@ -115,7 +115,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 // GetResult sends back win to Conductor : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan                             // wait for a result
-	fmt.Printf("sendresult: %d, %v\n", *index, result) // send this back to client
+	fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
 	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
@@ -159,12 +159,12 @@ done:
 }
 
 func main() {
-	flag.Parse()
+	flag.Parse() // HL
 	users.loggedIn = make(map[string]int)
 	users.nextID = -1
 	*numMiners++ // to include the Conductor (EXTERNAL)
 
-	port := fmt.Sprintf(":%d", 50051+*index)
+	port := fmt.Sprintf(":%d", 50051+*index) // HL
 	lis, err := net.Listen("tcp", port)
 	fatalF("failed to listen", err)
 
@@ -180,7 +180,7 @@ func main() {
 				select {
 				case block.data = <-blockchan: // HL
 					goto start
-				case <-time.After(allowedConductorTime * time.Second):
+				case <-time.After(allowedConductorTime * time.Second): // HL
 					fmt.Println("Need a live conductor!")
 				}
 			}
