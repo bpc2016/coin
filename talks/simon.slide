@@ -295,7 +295,7 @@ inner cycle goes in here ...
 
 - client invokes a *GetWork* request
 - the response is a signal to start the *search*, which, together with *getCancel* are called with channels *stopLooking* and *endLoop*
-- both channels are buffered, with capacity 1 and filled when getCancel returns
+- both channels are buffered, with capacity 1 and filled when getCancel  returns
 - at which point search is aborted and the main loop ended
 - it is also possible for *search* to return with a solution, before stopLooking fills
 - then  *announceWin* calls the *Announce* request to the server
