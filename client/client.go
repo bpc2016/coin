@@ -139,11 +139,10 @@ func main() {
 			if ok {                                  // we completed search
 				fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
 				win := annouceWin(c, theNonce, work.Coinbase) // HL
-				if win {                                      // it's possible that my winning nonce was late!
+				if win {                                      // late?
 					fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
 				}
 			}
-
 			<-endLoop // wait here for cancel from server
 			fmt.Printf("-----------------------\n")
 		}
