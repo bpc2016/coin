@@ -337,3 +337,21 @@ Initialisation dials it's servers, ignoring those it cannot reach:
 main loop ...
 
 .code ../conductor/conductor.go /a OMIT/,/^}/
+
+* Conductor - main() loop, code
+
+.code ../conductor/conductor.go /for \{/,/b OMIT/
+
+* Conductor - main() loop
+
+- after generating the new block and initialising various channels, each server is sent this block in a separate Go routine. Those not receiving it are ignored
+- successful sends are followed by a *getResult* call
+- unlike regular clients, the Conductor does not login with the *Login* interface, nor does it need to get work from the server.
+- instead, the *getWork* call is used to reconnect to servers that may have gone down. Their status is registered by *alive[]*, and the server acks are sent to the *serverUpChan* channel
+- as with other clients, the Conductor also makes a *getCancel* call - one per server
+
+* Conductor - main() loop, continued
+
+Meanwhile, the Conductor's own search blocks until it has heard from all live servers ... the loop ends likewise - on word from _all_
+.code ../conductor/conductor.go /b OMIT/,/c OMIT/
+
