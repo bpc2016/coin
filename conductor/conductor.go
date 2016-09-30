@@ -149,15 +149,15 @@ func main() {
 	}
 	// OMIT
 	for {
-		stopLooking := make(chan struct{}, *numServers)  // for search OMIT
-		endLoop := make(chan struct{}, *numServers)      // for this loop OMIT
-		workChan := make(chan *cpb.Work, *numServers)    // for gathering signins OMIT
-		lateEntry := make(chan struct{})                 // no more results please OMIT
-		theWinner := make(chan string, *numServers)      //  OMIT
-		newBlock := fmt.Sprintf("BLOCK: %v", time.Now()) // next block
+		stopLooking := make(chan struct{}, *numServers)   // for search OMIT
+		endLoop := make(chan struct{}, *numServers)       // for this loop OMIT
+		serverUpChan := make(chan *cpb.Work, *numServers) // for gathering signins OMIT
+		lateEntry := make(chan struct{})                  // no more results please OMIT
+		theWinner := make(chan string, *numServers)       //  OMIT
+		newBlock := fmt.Sprintf("BLOCK: %v", time.Now())  // next block
 		// OMIT
 		for _, c := range servers {
-			go func(c cpb.CoinClient, newBlock string,
+			go func(c cpb.CoinClient, newBlock string, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
 				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock})
@@ -165,33 +165,33 @@ func main() {
 					return
 				}
 				// conductor handles results
-				go getResult(c, "EXTERNAL", theWinner, lateEntry)
+				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
-				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"})
-				if skipF(c, "could not get work", err) {
+				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
+				if skipF(c, "could not reconnect", err) {                                        // HL
 					return
-				} else if !alive[c] {
+				} else if !alive[c] { // HL
 					alive[c] = true
 				}
 				//  OMIT
-				workChan <- r.Work // HL
+				serverUpChan <- r.Work // HL
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, newBlock, stopLooking, endLoop, theWinner, lateEntry)
 		}
-		//  collect the work request acks from servers
+		//  collect the work request acks from servers b OMIT
 		for c := range alive {
 			if !alive[c] {
 				continue
 			}
-			debugF("%+v\n", <-workChan)
+			debugF("%+v\n", <-serverUpChan)
 		}
 		// OMIT
 		debugF("%s\n", "...") //  OMIT
-		// 'search' blocks - the *sole* External one
+		// 'search' - as the common 'External' miner
 		theNonce, ok := search(stopLooking)
 		if ok {
-			declareWin(theWinner, lateEntry, uint32(*numServers),
+			declareWin(theWinner, lateEntry, uint32(*numServers), // HL
 				"external", theNonce)
 		}
 		//  wait for server cancellation responses
@@ -204,4 +204,4 @@ func main() {
 		//  OMIT
 		fmt.Println(<-theWinner, "\n---------------------------") // a OMIT
 	}
-}
+} // c OMIT
