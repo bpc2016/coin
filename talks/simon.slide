@@ -275,6 +275,15 @@ where *declareWin* does the following:
 
 * Client
 
+* Client - Intro
+
+These are the actual miners with primary function searching for the 'winning' block/nonce combination: hashing. Each client
+
+- has a unique user identity, here set by flag *user* or *-u*
+- connects to a single server, here configured by flag *-s*
+- will run unattended and continuously, even if the server is down for less than a configured period (in fact the only way to shut a client down aside from *ctrl-C* is to shut down its server for longer than this time)  
+- in this toy example, has a parameter *-t* that determines how 'hard' it's search is. The default value is 2
+
 * Client - main()
 
 This is made of two cycles, the outer one, where login occurs :
@@ -293,13 +302,13 @@ inner cycle goes in here ...
 
 * Client - main() inner cycle
 
+Here, we desrcibe the inner cycle, the code follows ...
+
 - client invokes a *GetWork* request
 - the response is a signal to start the *search*, which, together with *getCancel* are called with channels *stopLooking* and *endLoop*
-- both channels are buffered, with capacity 1 and filled when getCancel  returns
-- at which point search is aborted and the main loop ended
-- it is also possible for *search* to return with a solution, before stopLooking fills
-- then  *announceWin* calls the *Announce* request to the server
-- this time, the  loop waits for a subsequent cancellation from the server - via endLoop
+- both channels are buffered, with capacity 1 and filled when getCancel  returns, at which point search is aborted then the main loop ended
+- alternatively, *search* returns with a solution - before stopLooking fills
+- in this case *announceWin* calls the *Announce* request to the server. This time, the main() loop waits for a subsequent cancellation from the server - via endLoop
 
 * Client - main () inner cycle code
 
@@ -309,9 +318,22 @@ inner cycle goes in here ...
 
 * Conductor - Intro
 
-Presently there is only one Conductor that connects to a set of servers, as well as the outside world.
+We have only one Conductor that connects to a set of servers, as well as the outside world.
 
 - it runs sofware similar to the clients, except that it connects to more than one server and implements a few more interfaces
-- to each server, the conductor presents itself with username *EXTERNAL*
-- the servers send their winners (if any) to the conductor, which is responsible for determining the actual winner
-- the search it runs models declaring a winner in the external network, so is implemented here as a timeout  
+- to each server, the Conductor presents itself with username *EXTERNAL*
+- the servers send their winners (if any) to the Conductor 
+- the Conductor takes the first caller as actual winner, and tells the other servers to stop searching
+- the 'search' the Conductor runs models declaring a winner in the external network, so is implemented here as a simple timeout 
+- if a Conductor disconnects from a server, that server pauses all its clients and waits for the Conductor to become available
+- the only command-line flag is the addresses of its servers (here modelled by the number: *-s*)
+
+* Conductor - code
+
+Initialisation dials it's servers, ignoring those it cannot reach: 
+
+.code ../conductor/conductor.go /func main/,/for \{/
+
+main loop ...
+
+.code ../conductor/conductor.go /a OMIT/,/^}/
