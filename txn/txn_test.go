@@ -1,7 +1,6 @@
 package txn
 
 import (
-	"encoding/hex"
 	"fmt"
 	"reflect"
 	"testing"
@@ -48,36 +47,40 @@ func piece(a int, b int, v []byte) {
 }
 
 func TestCoinbase(t *testing.T) {
-	testInputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
-	testAmount := 2509094928                                                          // satoshi  25.09094928 BTC
-	testOutputindex := -1                                                             // required for coinbase
-	// testScriptSig, err := hex.DecodeString("03443b0403858402062f503253482f") "03443b04038584020662757369736f"
-	testBlockHeight := 277316
-	testExtraNonce := 0x858402
-	testUserName := "busiso"
-	testCoinBaseData, err := coinbaseData(testBlockHeight, testExtraNonce, testUserName)
-	if err != nil {
-		t.Error(err)
-	}
-	testScriptPubKey, err := hex.DecodeString("2102aa970c592640d19de03ff6f329d6fd2eecb023263b9ba5d1b81c29b523da8b21ac")
-	if err != nil {
-		t.Error(err)
-	}
-	testRawTx, err := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0f03443b0403858402062f503253482fffffffff0110c08d9500000000232102aa970c592640d19de03ff6f329d6fd2eecb023263b9ba5d1b81c29b523da8b21ac00000000")
-	if err != nil {
-		t.Error(err)
-	}
+	// testInputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
+	// testAmount := 2509094928                                                          // satoshi  25.09094928 BTC
+	// testOutputindex := -1
+	// testBlockHeight := 277316
+	// testExtraNonce := 0x858402
+	// testUserName := "busiso"
+	// testCoinBaseData, err := coinbaseData(testBlockHeight, testExtraNonce, testUserName)
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+	// testScriptPubKey, err := P2PKH("0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086") //hex.DecodeString("2102aa970c592640d19de03ff6f329d6fd2eecb023263b9ba5d1b81c29b523da8b21ac")
+	// if err != nil {
+	// 	t.Error(err)
+	// }
+	// testRawTx, err := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0f03443b0403858402062f503253482fffffffff0110c08d9500000000232102aa970c592640d19de03ff6f329d6fd2eecb023263b9ba5d1b81c29b523da8b21ac00000000")
+	// if err != nil {
+	// 	t.Error(err)
+	// }
 
-	rawTx, err := NewRawTransaction(testInputTx, testAmount, testOutputindex, testCoinBaseData, testScriptPubKey)
+	rawTx, err := NewCoinBase(277316, 9094928, "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086", 0x858402, "user:busiso")
 	if err != nil {
 		t.Error(err)
 	}
 
 	fmt.Printf("rawtx:\n%x\n", rawTx)
 
-	if !reflect.DeepEqual(rawTx, testRawTx) {
-		fmt.Printf("Raw transaction different from expected transaction.\n%v\n%v\n", testRawTx, rawTx)
-	}
+	// if !reflect.DeepEqual(rawTx, testRawTx) {
+	// 	fmt.Printf("Raw transaction different from expected transaction.\n%v\n%v\n", testRawTx, rawTx)
+	// }
+
+	// res, _ := P2PKH("0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086")
+
+	// fmt.Printf("p2kh :\n%x\n", res)
+
 }
 
 // 15 - length of script sig
@@ -109,3 +112,8 @@ func TestCoinbase(t *testing.T) {
 // 975efcba1e058667594dc57146022ec46560a63c - data with length 14 (20 in dec)
 // 88 - OP_EQUALVERIFY opcode
 // ac - OP_CHECKSIG opcode
+
+// 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - wif
+// 0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086 - pubkey
+// 164f1d1d6fce7e2e491352b95b4ea47b880c1546 - after Hash160
+// KyufBz2L22mZgxgeftJuDK7Fot4rMarX4sQ7v5SNE9eZhq1wSqVf - privkey

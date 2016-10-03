@@ -3,9 +3,12 @@ package txn
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+
+	"golang.org/x/crypto/ripemd160"
 )
 
 // NewRawTransaction creates a Bitcoin transaction given inputs, output satoshi amount, outputindex, scriptSig and scriptPubKey
@@ -129,10 +132,13 @@ func coinbaseData(bh int, extra int, user string) ([]byte, error) {
 }
 
 // NewCoinBase returns a coinbase transaction given blockHeight, blockFees (satoshi), extraNonce and extraData
-func NewCoinBase(blockHeight int, blockFees int, extraNonce int, extraData string) ([]byte, error) {
+func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) ([]byte, error) {
 	inputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
 	satoshis := getValue(blockHeight) + blockFees
-	scriptpubkey := make([]byte, 1)
+	scriptpubkey, err := P2PKH(pubkey)
+	if err != nil {
+		return nil, err
+	}
 	outputIndex := -1
 	coinbasedata, err := coinbaseData(blockHeight, extraNonce, extraData)
 	if err != nil {
@@ -156,4 +162,49 @@ func getValue(blockHeight int) int {
 	}
 	subsidy >>= halvings
 	return subsidy
+}
+
+// Hash160 performs the same operations as OP_HASH160 in Bitcoin Script
+// It hashes the given data first with SHA256, then RIPEMD160
+func Hash160(data []byte) ([]byte, error) {
+	//Does identical function to Script OP_HASH160. Hash once with SHA-256, then RIPEMD-160
+	if data == nil {
+		return nil, errors.New("Empty bytes cannot be hashed")
+	}
+	shaHash := sha256.New()
+	shaHash.Write(data)
+	hash := shaHash.Sum(nil) // SHA256 first
+	ripemd160Hash := ripemd160.New()
+	ripemd160Hash.Write(hash)
+	hash = ripemd160Hash.Sum(nil) //RIPEMD160 second
+
+	return hash, nil
+}
+
+// P2PKH returns the pay-to-public-key-hash script against hex address pubkey
+func P2PKH(pubkey string) ([]byte, error) {
+	// OP_DUP HASH160 0x14
+	opduphash, err := hex.DecodeString("76a914")
+	if err != nil {
+		return nil, err
+	}
+	addr, err := hex.DecodeString(pubkey)
+	if err != nil {
+		return nil, err
+	}
+	pubkeyBytes, err := Hash160(addr)
+	if err != nil {
+		return nil, err
+	}
+	opverifychecksig, err := hex.DecodeString("88ac")
+	if err != nil {
+		return nil, err
+	}
+
+	var buffer bytes.Buffer
+	buffer.Write(opduphash)
+	buffer.Write(pubkeyBytes)
+	buffer.Write(opverifychecksig)
+
+	return buffer.Bytes(), nil
 }
