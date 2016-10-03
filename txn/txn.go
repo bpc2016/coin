@@ -1,5 +1,5 @@
-// Package transactions has teh code for manipulating bitcoin txes
-package transactions
+// Package txn has the code for manipulating bitcoin transactions
+package txn
 
 import (
 	"bytes"
@@ -83,32 +83,27 @@ func NewRawTransaction(inputTxHash string, satoshis int, outputindex int, script
 
 // coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase
 func coinbaseData(bh int, extra int, user string) ([]byte, error) {
-	//
-	// bh = 277316 // 65 * 210000
-	// extra = 0x858402
-	// user = "busiso"
+	totlen := 0 // bytes consumed
+	bhlen := 4  // max lenngth of blockheight data
 
-	totlen := 0
-	bhlen := 4
-
-	bhAllowed := make([]byte, 4) // will accomodate largest possible blockheighth of 500 million
-	binary.LittleEndian.PutUint32(bhAllowed, uint32(bh))
+	bhMaxBytes := make([]byte, 4) // will accomodate largest possible blockheighth of 500 million
+	binary.LittleEndian.PutUint32(bhMaxBytes, uint32(bh))
 	// decide the actual length required
-	for bhAllowed[bhlen-1] == 0 {
+	for bhMaxBytes[bhlen-1] == 0 {
 		bhlen--
 	}
 	lenBlockHeight := make([]byte, 1)
 	lenBlockHeight[0] = uint8(bhlen)
 	totlen += bhlen + 1
 	// the desired slice
-	blockHeight := bhAllowed[0:bhlen]
+	blockHeight := bhMaxBytes[0:bhlen]
 	//length of extranonce always 3 in our case)
 	lenextra, err := hex.DecodeString("03")
 	if err != nil {
 		return nil, err
 	}
 	totlen += 3 + 1
-	// extranonce - use just 03 bytes
+	// extranonce
 	extranonce := make([]byte, 3)
 	temp := make([]byte, 4)
 	binary.BigEndian.PutUint32(temp, uint32(extra))
@@ -130,6 +125,35 @@ func coinbaseData(bh int, extra int, user string) ([]byte, error) {
 	buffer.Write(lenuser)
 	buffer.Write(userBytes)
 
-	// fmt.Printf("bytes: \n%x\n", buffer.Bytes())
 	return buffer.Bytes(), nil
+}
+
+// NewCoinBase returns a coinbase transaction given blockHeight, blockFees (satoshi), extraNonce and extraData
+func NewCoinBase(blockHeight int, blockFees int, extraNonce int, extraData string) ([]byte, error) {
+	inputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
+	satoshis := getValue(blockHeight) + blockFees
+	scriptpubkey := make([]byte, 1)
+	outputIndex := -1
+	coinbasedata, err := coinbaseData(blockHeight, extraNonce, extraData)
+	if err != nil {
+		return nil, err
+	}
+	return NewRawTransaction(inputTx, satoshis, outputIndex, coinbasedata, scriptpubkey)
+}
+
+// BTC is the number of satoshi in a single bitcoin : 10^8
+const BTC = 100000000
+
+// HalvingInterval is how often the 'subsidy' or reward is halved, in blocks
+const HalvingInterval = 210000
+
+// calculate the mining reward at this height
+func getValue(blockHeight int) int {
+	subsidy := 50 * BTC
+	halvings := uint(blockHeight / HalvingInterval)
+	if halvings >= 64 {
+		return 0
+	}
+	subsidy >>= halvings
+	return subsidy
 }

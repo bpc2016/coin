@@ -1,4 +1,4 @@
-package transactions
+package txn
 
 import (
 	"encoding/hex"
