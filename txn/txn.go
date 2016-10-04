@@ -208,3 +208,14 @@ func P2PKH(pubkey string) ([]byte, error) {
 
 	return buffer.Bytes(), nil
 }
+
+// assuming we have base58 encoding, this is how we do it, note
+// 76a914 164f1d1d6fce7e2e491352b95b4ea47b880c1546 88ac
+func pkhash2wif() {
+	// 164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - the entry here
+	// 00164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - add network '00' to front
+	// 1FA2C09F7505B401B0536F916A0ACD70941E3DBEAD54ACF843A7240C5A1B6101 - doubleSha256
+	// 1FA2C09F - grab first 4 bytes
+	// 00164F1D1D6FCE7E2E491352B95B4EA47B880C15461FA2C09F - append to (2) above
+	// 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
+}

@@ -80,7 +80,6 @@ func TestCoinbase(t *testing.T) {
 	// res, _ := P2PKH("0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086")
 
 	// fmt.Printf("p2kh :\n%x\n", res)
-
 }
 
 // 15 - length of script sig
