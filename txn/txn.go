@@ -219,3 +219,15 @@ func pkhash2wif() {
 	// 00164F1D1D6FCE7E2E491352B95B4EA47B880C15461FA2C09F - append to (2) above
 	// 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
 }
+
+// Coinbase is a type of transaction, see below for uses
+type Coinbase []byte
+
+// CoinBase returns the transaction slice - typed as 'coinbase' rather than slice
+func CoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) (Coinbase, error) {
+	res, err := NewCoinBase(blockHeight, blockFees, pubkey, extraNonce, extraData)
+	if err != nil {
+		return nil, err
+	}
+	return Coinbase(res), nil
+}
