@@ -86,8 +86,9 @@ func NewRawTransaction(inputTxHash string, satoshis int, outputindex int, script
 
 // coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase
 func coinbaseData(bh int, extra int, user string) ([]byte, error) {
-	totlen := 0 // bytes consumed
-	bhlen := 4  // max lenngth of blockheight data
+	totlen := 0   // bytes consumed
+	bhlen := 4    // max lenngth of blockheight data
+	extralen := 3 // bytes for the extra nonce
 
 	bhMaxBytes := make([]byte, 4) // will accomodate largest possible blockheighth of 500 million
 	binary.LittleEndian.PutUint32(bhMaxBytes, uint32(bh))
@@ -95,19 +96,12 @@ func coinbaseData(bh int, extra int, user string) ([]byte, error) {
 	for bhMaxBytes[bhlen-1] == 0 {
 		bhlen--
 	}
-	lenBlockHeight := make([]byte, 1)
-	lenBlockHeight[0] = uint8(bhlen)
 	totlen += bhlen + 1
 	// the desired slice
 	blockHeight := bhMaxBytes[0:bhlen]
-	//length of extranonce always 3 in our case)
-	lenextra, err := hex.DecodeString("03")
-	if err != nil {
-		return nil, err
-	}
-	totlen += 3 + 1
 	// extranonce
-	extranonce := make([]byte, 3)
+	totlen += extralen + 1
+	extranonce := make([]byte, extralen)
 	temp := make([]byte, 4)
 	binary.BigEndian.PutUint32(temp, uint32(extra))
 	copy(extranonce[0:3], temp[1:4])
@@ -117,15 +111,13 @@ func coinbaseData(bh int, extra int, user string) ([]byte, error) {
 	if len(userBytes) > 100-totlen-1 {
 		return nil, errors.New("username too long")
 	}
-	lenuser := make([]byte, 1)
-	lenuser[0] = uint8(len(userBytes))
 
 	var buffer bytes.Buffer
-	buffer.Write(lenBlockHeight)
+	buffer.WriteByte(byte(bhlen))
 	buffer.Write(blockHeight)
-	buffer.Write(lenextra)
+	buffer.WriteByte(byte(extralen))
 	buffer.Write(extranonce)
-	buffer.Write(lenuser)
+	buffer.WriteByte(byte(len(userBytes)))
 	buffer.Write(userBytes)
 
 	return buffer.Bytes(), nil
@@ -220,14 +212,18 @@ func pkhash2wif() {
 	// 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
 }
 
-// Coinbase is a type of transaction, see below for uses
-type Coinbase []byte
+// Transaction type allows to dissemble byte sequence outputs
+type Transaction []byte
 
 // CoinBase returns the transaction slice - typed as 'coinbase' rather than slice
-func CoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) (Coinbase, error) {
+func CoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) (Transaction, error) {
 	res, err := NewCoinBase(blockHeight, blockFees, pubkey, extraNonce, extraData)
 	if err != nil {
 		return nil, err
 	}
-	return Coinbase(res), nil
+	return Transaction(res), nil
+}
+
+func (c *Transaction) setNonce(nonce int) {
+
 }

@@ -1,6 +1,7 @@
 package txn
 
 import (
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"testing"
@@ -61,10 +62,11 @@ func TestCoinbase(t *testing.T) {
 	// if err != nil {
 	// 	t.Error(err)
 	// }
-	// testRawTx, err := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0f03443b0403858402062f503253482fffffffff0110c08d9500000000232102aa970c592640d19de03ff6f329d6fd2eecb023263b9ba5d1b81c29b523da8b21ac00000000")
-	// if err != nil {
-	// 	t.Error(err)
-	// }
+
+	testRawTx, err := hex.DecodeString("01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff1403443b04038584020b757365723a62757369736fffffffff0110c08d95000000001976a914164f1d1d6fce7e2e491352b95b4ea47b880c154688ac00000000")
+	if err != nil {
+		t.Error(err)
+	}
 
 	rawTx, err := NewCoinBase(277316, 9094928, "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086", 0x858402, "user:busiso")
 	if err != nil {
@@ -73,9 +75,9 @@ func TestCoinbase(t *testing.T) {
 
 	fmt.Printf("rawtx:\n%x\n", rawTx)
 
-	// if !reflect.DeepEqual(rawTx, testRawTx) {
-	// 	fmt.Printf("Raw transaction different from expected transaction.\n%v\n%v\n", testRawTx, rawTx)
-	// }
+	if !reflect.DeepEqual(rawTx, testRawTx) {
+		fmt.Printf("Raw transaction different from expected transaction.\n%v\n%v\n", testRawTx, rawTx)
+	}
 
 	// res, _ := P2PKH("0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086")
 
