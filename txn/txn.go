@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 
 	"golang.org/x/crypto/ripemd160"
 )
@@ -84,47 +85,84 @@ func NewRawTransaction(inputTxHash string, satoshis int, outputindex int, script
 	return buffer.Bytes(), nil
 }
 
-// coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase
-func coinbaseData(bh int, extra int, user string) ([]byte, error) {
-	totlen := 0   // bytes consumed
-	bhlen := 4    // max lenngth of blockheight data
-	extralen := 3 // bytes for the extra nonce
+/*
+The only convention followed in contructing the coinbase 'scritpsig' is that it carry
+the block height at teh beginning - in lower Endian - together with the number of bytes
+this occupies, so bh = 277316 => coinbasedata starts with 003443b04, since 0x043b44
+is hex for 277316. The only other limitation is that the script has a max length 100
+and that the following data ususally encodes the 'extra nonce' and the identity of the
+mining pool. We will thus fix teh following:
+	bhlen - 1 byte
+	bh - 3/4 bytes
+	extranonce - 4 bytes
+	miner id - 3 bytes
+	miner hash - 20 bytes
+	pool identity - 9 bytes
+where
+1. miner hash is encoded using hash160 - so the true extranonce is
+miner = hash160(miner identity+extranonce)
+this makes verifiaction of teh winner easy all around: users will have a directory of
+miner identities, and we assume fewer than 2^24 = 16,777,216 miners and that the speed
+of each will be such that we do not need to exhaust all 2^32 = 4,294,967,296 extra
+nonce space.
+2. the pool identity is fixed at /Zocheza/ --> 2f5a6f6368657a612f has 9 bytes
+we will set this as a 'const'
+3. what public methods?
+	coinbaseData(bh, enonce, minerid) - will require map: minerid -> miner identity
+	extract(key string) - to get bh, extranonce, miner id, minerhash
+	nextnonce() - increment extra nonce, return new coinbasedata
+*/
 
+const extralen = 4      // number of bytes for the extranonce
+const mineridlen = 3    // number of bytes for the miner id
+const minerhashlen = 20 // number of bytes for miner user hash
+
+// coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase
+func coinbaseData(bh int, extra int, minerid int, miner string) ([]byte, error) {
+	bhlen := 4                    // max length of blockheight data
 	bhMaxBytes := make([]byte, 4) // will accomodate largest possible blockheighth of 500 million
 	binary.LittleEndian.PutUint32(bhMaxBytes, uint32(bh))
 	// decide the actual length required
 	for bhMaxBytes[bhlen-1] == 0 {
 		bhlen--
 	}
-	totlen += bhlen + 1
 	// the desired slice
 	blockHeight := bhMaxBytes[0:bhlen]
 	// extranonce
-	totlen += extralen + 1
-	extranonce := make([]byte, extralen)
+	extranonce := make([]byte, extralen) // 4 bytes
+	binary.LittleEndian.PutUint32(extranonce, uint32(extra))
+	// miner id
+	minerIDBytes := make([]byte, mineridlen)
 	temp := make([]byte, 4)
-	binary.BigEndian.PutUint32(temp, uint32(extra))
-	copy(extranonce[0:3], temp[1:4])
-	// username
-	userBytes := []byte(user)
-	//length of username
-	if len(userBytes) > 100-totlen-1 {
-		return nil, errors.New("username too long")
+	binary.LittleEndian.PutUint32(temp, uint32(minerid))
+	copy(minerIDBytes[:], temp[0:3]) // use the three bytes
+	// minerhash
+	var hashbuffer bytes.Buffer
+	hashbuffer.Write(extranonce)
+	hashbuffer.Write([]byte(miner))
+	minerHashBytes, err := Hash160(hashbuffer.Bytes())
+	if err != nil {
+		return nil, err
 	}
-
+	// pool identity - /Zocheza/
+	poolIdentity, err := hex.DecodeString("2f5a6f6368657a612f")
+	if err != nil {
+		return nil, err
+	}
+	// assemble the bytes
 	var buffer bytes.Buffer
 	buffer.WriteByte(byte(bhlen))
 	buffer.Write(blockHeight)
-	buffer.WriteByte(byte(extralen))
 	buffer.Write(extranonce)
-	buffer.WriteByte(byte(len(userBytes)))
-	buffer.Write(userBytes)
+	buffer.Write(minerIDBytes)
+	buffer.Write(minerHashBytes)
+	buffer.Write(poolIdentity)
 
 	return buffer.Bytes(), nil
 }
 
-// NewCoinBase returns a coinbase transaction given blockHeight, blockFees (satoshi), extraNonce and extraData
-func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) ([]byte, error) {
+// NewCoinBase returns a coinbase transaction given blockHeight, blockFees (satoshi), extraNonce and miner
+func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, miner int, minerlist []string) ([]byte, error) {
 	inputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
 	satoshis := getValue(blockHeight) + blockFees
 	scriptpubkey, err := P2PKH(pubkey)
@@ -132,7 +170,7 @@ func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, 
 		return nil, err
 	}
 	outputIndex := -1
-	coinbasedata, err := coinbaseData(blockHeight, extraNonce, extraData)
+	coinbasedata, err := coinbaseData(blockHeight, extraNonce, miner, minerlist[miner])
 	if err != nil {
 		return nil, err
 	}
@@ -204,26 +242,119 @@ func P2PKH(pubkey string) ([]byte, error) {
 // assuming we have base58 encoding, this is how we do it, note
 // 76a914 164f1d1d6fce7e2e491352b95b4ea47b880c1546 88ac
 func pkhash2wif() {
-	// 164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - the entry here
-	// 00164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - add network '00' to front
-	// 1FA2C09F7505B401B0536F916A0ACD70941E3DBEAD54ACF843A7240C5A1B6101 - doubleSha256
-	// 1FA2C09F - grab first 4 bytes
-	// 00164F1D1D6FCE7E2E491352B95B4EA47B880C15461FA2C09F - append to (2) above
-	// 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
+	// (1) 164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - the entry here
+	// (2) 00164F1D1D6FCE7E2E491352B95B4EA47B880C1546 - add network '00' to front
+	// (3) 1FA2C09F7505B401B0536F916A0ACD70941E3DBEAD54ACF843A7240C5A1B6101 - doubleSha256
+	// (4) 1FA2C09F - grab first 4 bytes
+	// (5) 00164F1D1D6FCE7E2E491352B95B4EA47B880C15461FA2C09F - append to (2) above
+	// (6) 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
+}
+
+// unravel takes a slice (e.g coinbase data) and fills hex data
+func unravel(v []byte) []string {
+	var res []string
+	ptr := 0
+	length := len(v)
+	for ptr < length {
+		m := int(v[ptr])
+		res = append(res, fmt.Sprintf("%x", v[ptr+1:ptr+m+1]))
+		ptr += m + 1
+	}
+	return res
 }
 
 // Transaction type allows to dissemble byte sequence outputs
 type Transaction []byte
 
 // CoinBase returns the transaction slice - typed as 'coinbase' rather than slice
-func CoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, extraData string) (Transaction, error) {
-	res, err := NewCoinBase(blockHeight, blockFees, pubkey, extraNonce, extraData)
+func CoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, miner int, minerslist []string) (Transaction, error) {
+	res, err := NewCoinBase(blockHeight, blockFees, pubkey, extraNonce, miner, minerslist)
 	if err != nil {
 		return nil, err
 	}
 	return Transaction(res), nil
 }
 
-func (c *Transaction) setNonce(nonce int) {
+// .entry returns the contents at posiion n (>=0) as an integer in [0,255]
+func (t Transaction) entry(n int) int {
+	return int(t[n])
+}
 
+// .get returns the  tranasction's slice from s to s+length-1 (an array of size length)
+func (t Transaction) get(s, length int) []byte {
+	return t[s : s+length]
+}
+
+// .put modifies the slice between positions s and s+len(vals)-1. safe at the end of slice - drops vals
+func (t Transaction) put(s int, vals []byte) {
+	copy(t[s:s+len(vals)], vals)
+}
+
+func (t Transaction) detail() {
+	pos := 0
+	fmt.Printf("length: %d\n---------\n", len(t))
+	fmt.Printf("version: %v\n", t.get(0, 4))
+	pos += 4
+	fmt.Printf("input count: %v\n", t.get(pos, 1))
+	pos++
+	fmt.Printf("input: %x\n", t.get(pos, 32))
+	pos += 32
+	fmt.Printf("[%d] output index: %x\n", pos, t.get(pos, 4))
+	pos += 4
+	v := t.entry(pos)
+	fmt.Printf("[%d] length scriptsig: %d\n", pos, t.get(pos, 1))
+	pos++
+	fmt.Printf("[%d] scriptsig: %x\n", pos, t.get(pos, v))
+	pos += v
+	fmt.Printf("sequence: %x\n", t.get(pos, 4))
+	pos += 4
+	fmt.Printf("output count: %d\n", t.get(pos, 1))
+	pos++
+	fmt.Printf("satoshi (lE): %x\n", t.get(pos, 8))
+	pos += 8
+	v = t.entry(pos)
+	fmt.Printf("[%d] length scriptpubkey: %d\n", pos, t.get(pos, 1))
+	pos++
+	fmt.Printf("[%d] scriptpubkey: %x\n", pos, t.get(pos, v))
+	pos += v
+	fmt.Printf("locktime: %x\n", t.get(pos, 4))
+
+	if cbdata, err := t.getNonce(); err == nil {
+		fmt.Printf("*********\n%v\n", cbdata)
+		vals := unravel(cbdata)
+		for _, s := range vals {
+			fmt.Println(s)
+		}
+	}
+}
+
+// setNonce resets the nnce of a coinbase transaction
+func (t Transaction) setNonce(nonce int) error {
+	// make sure this is a coinbase txn
+	if t.outindex() != "ffffffff" {
+		return errors.New("not a coinbase transaction")
+	}
+	return nil
+}
+
+// getNonce fetches the nonce of a coinbase transaction
+func (t Transaction) getNonce() ([]byte, error) {
+	// make sure this is a coinbase txn
+	if t.outindex() != "ffffffff" {
+		return nil, errors.New("not a coinbase transaction")
+	}
+	// the coinbase data really scriptsig
+	return t.scriptsig(), nil
+}
+
+const posOutIndex = 37     // position of the output index data
+const posLenScriptSig = 41 // position of the length srciptsig data
+
+func (t Transaction) scriptsig() []byte {
+	length := t.entry(posLenScriptSig)
+	return t.get(posLenScriptSig+1, length)
+}
+
+func (t Transaction) outindex() string {
+	return fmt.Sprintf("%x", t.get(posOutIndex, 4))
 }
