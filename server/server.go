@@ -1,6 +1,7 @@
 package main
 
 import (
+	"coin"
 	cpb "coin/service"
 	"errors"
 	"flag"
@@ -156,6 +157,15 @@ done:
 		}
 	}
 	fmt.Printf("miners %s = %d\n", direction, count)
+}
+
+// coinbase accepts data from work, result is tailored to miner
+func coinbase(upper []byte, lower []byte, blockHeight int,
+	miner int, minerlist []string) coin.Transaction {
+	txn, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minerlist)
+	fatalF("failed to generate coinbase transaction", err)
+	// fmt.Printf("%x", txn)
+	return coin.Transaction(txn) // convert to a transaction type
 }
 
 func main() {

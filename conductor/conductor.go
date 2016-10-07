@@ -1,6 +1,7 @@
 package main
 
 import (
+	"coin"
 	"flag"
 	"fmt"
 	"log"
@@ -131,6 +132,19 @@ func debugF(format string, args ...interface{}) {
 	if *debug {
 		log.Printf(format, args...)
 	}
+}
+
+func newBlock() (upper, lower []byte, blockheight int) {
+	blockHeight := 433789
+	blockFees := 8756123 // satoshi
+	pubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
+	// conductor generates this ..
+	upper, lower, err := coin.CoinbaseTemplates(blockHeight, blockFees, pubkey)
+	if err != nil {
+		log.Fatalf("failed to generate coinbase: %v", err)
+	}
+	// sends upper, lower , blockHeight --> server
+	return upper, lower, blockHeight
 }
 
 func main() {
