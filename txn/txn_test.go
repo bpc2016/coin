@@ -3,7 +3,6 @@ package txn
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -11,16 +10,6 @@ func piece(a int, b int, v []byte, label string) []byte {
 	slice := v[a : b+1]
 	fmt.Printf(">> %d - %d\n%s: %v %x\n", a, b, label, slice, slice)
 	return slice
-}
-
-func littleEndian(v []byte) string {
-	length := len(v)
-	vReversed := make([]byte, length)
-	for i := 0; i < length; i++ {
-		vReversed[i] = v[length-i-1]
-	}
-	str := fmt.Sprintf("%x", vReversed)
-	return strings.TrimLeft(str, "0")
 }
 
 func TestCoinbaseData(t *testing.T) {
@@ -37,42 +26,98 @@ func TestCoinbaseData(t *testing.T) {
 	n := int(p[0]) // either 3 or 4 - bytes length of hex(blockheight)
 	p = piece(1, n, cb, "blockheight")
 	h1 := littleEndian(p)
-	h2 := fmt.Sprintf("%x", testbh)
-	if h1 != h2 {
-		t.Errorf("wrong blockheight length %s != %s", h1, h2)
+	if h1 != testbh {
+		t.Errorf("wrong blockheight  %d != %d", h1, testbh)
 	}
 	nce := piece(n+1, n+4, cb, "extranonce")
 	h1 = littleEndian(nce)
-	h2 = fmt.Sprintf("%x", testextra)
-	if h1 != h2 {
-		t.Errorf("extranonce error %s != %s", h1, h2)
+	if h1 != testextra {
+		t.Errorf("extranonce error %d != %d", h1, testextra)
 	}
 	p = piece(n+5, n+7, cb, "miner id")
 	h1 = littleEndian(p)
-	h2 = fmt.Sprintf("%x", testminerid)
-	if h1 != h2 {
-		t.Errorf("miner id error %s != %s", h1, h2)
+	if h1 != testminerid {
+		t.Errorf("miner id error %d != %d", h1, testminerid)
 	}
 	p = piece(n+8, n+8+20-1, cb, "miner hash")
 	m := []byte(testminer)
 	v := make([]byte, 4+len(m)) // to accommodate nonce and the name ...
 	copy(v[0:3], nce)
 	copy(v[4:], m)
-	hv, err := Hash160(v)
+	hv, err := Hash160(v) // hash them together
 	if err != nil {
 		t.Error(err)
 	}
-	h1 = fmt.Sprintf("%x", hv)
-	h2 = fmt.Sprintf("%x", p)
-	if h1 != h2 {
-		t.Errorf("miner hash error %s != %s", h1, h2)
+	h2 := fmt.Sprintf("%x", hv)
+	h3 := fmt.Sprintf("%x", p)
+	if h2 != h3 {
+		t.Errorf("miner hash error %s != %s", h2, h3)
 	}
 	p = piece(n+28, n+28+9-1, cb, "pool identity")
-	h1 = fmt.Sprintf("%x", p)
-	h2 = "2f5a6f6368657a612f"
-	if h1 != h2 {
-		t.Errorf("pool identity error %s != %s", h1, h2)
+	h2 = fmt.Sprintf("%x", p)
+	h3 = "2f5a6f6368657a612f"
+	if h2 != h3 {
+		t.Errorf("pool identity error %s != %s", h2, h3)
 	}
+}
+
+func TestCoinBase(t *testing.T) {
+	testblockHeight := 433789
+	testblockFees := 8756123 // satoshi
+	testpubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
+	testextraNonce := 0 //0xfffffffe //
+	testminer := 1      // the second, below
+	testminerlist := []string{"first", "the second"}
+	cbt, err := NewCoinBase(testblockHeight, testblockFees, testpubkey, testextraNonce, testminer, testminerlist)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Printf("coinbase transaction:\n%x\n", cbt)
+	r := Transaction(cbt)
+	r.detail() // specilised for transaction decoding
+
+	nce, err := r.getNonce()
+	if err != nil {
+		t.Error(err)
+	} else {
+		fmt.Printf("extranonce: %d\n", nce)
+
+		r.IncrementNonce()
+		nce, err := r.getNonce()
+		if err != nil {
+			t.Error(err)
+		}
+		fmt.Printf("new: %d\n", nce)
+	}
+}
+
+func TestApplication(t *testing.T) {
+	testblockHeight := 433789
+	testblockFees := 8756123 // satoshi
+	testpubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
+	testminer := 1 // the second, below
+	testminerlist := []string{"first", "the second"}
+	testTxn := "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff28037d9e0600000000010000122576d604d82a71b7747c1fa7db6fe79abd298b2f5a6f6368657a612fffffffff011b18074b000000001976a914164f1d1d6fce7e2e491352b95b4ea47b880c154688ac00000000"
+
+	// conductor generates this ..
+	upper, lower, err := Templates(testblockHeight, testblockFees, testpubkey)
+	if err != nil {
+		t.Error(err)
+	}
+	// sends upper, lower , blockHeight --> server
+
+	// server uses this, and for miners ..
+	txn, err := FromTemplate(upper, lower, testblockHeight, testminer, testminerlist)
+	if err != nil {
+		t.Error(err)
+	}
+	tx := fmt.Sprintf("%x", txn)
+	if tx != testTxn {
+		t.Errorf("result \n%s\ndiffers from expected\n%s\n", tx, testTxn)
+	}
+	fmt.Printf("txn:\n%x\n", txn)
+	r := Transaction(txn)
+	r.detail() // specilised for transaction decoding
 }
 
 func TestNewRawTransaction(t *testing.T) {
@@ -92,26 +137,9 @@ func TestNewRawTransaction(t *testing.T) {
 		t.Errorf("Raw transaction different from expected transaction.\n%v\n%v\n", testRawTx, rawTx)
 	}
 
-	// L := len(rawTx)
-
-	// piece(0, 3, rawTx)        // version - 4 bytes
-	// piece(4, 4, rawTx)        // number - 1 byte
-	// piece(5, 32+5-1, rawTx)   // input tx hash - 32 bytes
-	// piece(37, 40, rawTx)      // output index (starts at 0) - 4 bytes
-	// piece(41, 41, rawTx)      // length of following script = 25 or 0x19 here
-	// piece(42, 42+25-1, rawTx) // script sig "unlocking script"
-	// piece(67, 67+4-1, rawTx)  // sequence set at 0xffffff -4 bytes
-	// piece(71, 71, rawTx)      // number of outputs - 1 byte
-	// piece(72, 72+8-1, rawTx)  // satoshis : little endian - 8 bytes
-	// piece(80, 80, rawTx)      // length of following script = 23 - 1 (variable)
-	// piece(81, 81+23-1, rawTx) // script pub key "locking script"
-	// piece(104, 107, rawTx)    // locktime - 4 byte
-
-	// fmt.Printf("Length: %d\nAmount: %x\n", L, testAmount)
-
 	fmt.Printf("rawTX: %x\n", rawTx)
 	r := Transaction(rawTx)
-	r.detail()
+	r.detail() // specilised for transaction decoding
 }
 
 /*

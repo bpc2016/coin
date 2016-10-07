@@ -110,7 +110,7 @@ we will set this as a 'const'
 3. what public methods?
 	coinbaseData(bh, enonce, minerid) - will require map: minerid -> miner identity
 	extract(key string) - to get bh, extranonce, miner id, minerhash
-	nextnonce() - increment extra nonce, return new coinbasedata
+	IncrementNonce() - increment extra nonce, return new coinbasedata
 */
 
 const extralen = 4      // number of bytes for the extranonce
@@ -163,9 +163,9 @@ func coinbaseData(bh int, extra int, minerid int, miner string) ([]byte, error) 
 
 // NewCoinBase returns a coinbase transaction given blockHeight, blockFees (satoshi), extraNonce and miner
 func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, miner int, minerlist []string) ([]byte, error) {
-	inputTx := "0000000000000000000000000000000000000000000000000000000000000000" // coinbase
-	satoshis := getValue(blockHeight) + blockFees
-	scriptpubkey, err := P2PKH(pubkey)
+	inputTx := "0000000000000000000000000000000000000000000000000000000000000000" // string - coinbase input txn
+	satoshis := getValue(blockHeight) + blockFees                                 // int - satoshis
+	scriptpubkey, err := P2PKH(pubkey)                                            // []byte - script
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +175,64 @@ func NewCoinBase(blockHeight int, blockFees int, pubkey string, extraNonce int, 
 		return nil, err
 	}
 	return NewRawTransaction(inputTx, satoshis, outputIndex, coinbasedata, scriptpubkey)
+}
+
+// FromTemplate creates a  coinbase transaction given slices upperTemplate, lowerTemplate
+// which represent the parts of the txn aside from the coinbasedata
+func FromTemplate(upperTemplate []byte, lowerTemplate []byte,
+	blockHeight int, miner int, minerlist []string) ([]byte, error) {
+	// contruct the coinbasedata, extranince=0
+	coinbasedata, err := coinbaseData(blockHeight, 0, miner, minerlist[miner])
+	if err != nil {
+		return nil, err
+	}
+	var buffer bytes.Buffer
+	buffer.Write(upperTemplate)
+	buffer.WriteByte(byte(len(coinbasedata)))
+	buffer.Write(coinbasedata)
+	buffer.Write(lowerTemplate)
+
+	return buffer.Bytes(), nil
+}
+
+// Templates is what the server uses to deploy the upper & lower templates
+func Templates(blockHeight int, blockFees int, pubkey string) (upper, lower []byte, err error) {
+	var upperBuffer, lowerBuffer bytes.Buffer
+
+	//Version field
+	version := make([]byte, 4)
+	binary.LittleEndian.PutUint32(version, 1)
+	// InputTxn - here all zeros
+	coinbaseInput := make([]byte, 32) // all 0s
+	//Ouput index of input transaction -1 for coinbase
+	outputIndexBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(outputIndexBytes, 0xffffffff)
+	sequence := make([]byte, 4)
+	binary.BigEndian.PutUint32(sequence, 0xffffffff)
+	locktime := make([]byte, 4) // all 0s here
+	//Satoshis to send.
+	satoshis := getValue(blockHeight) + blockFees
+	amount := make([]byte, 8)
+	binary.LittleEndian.PutUint64(amount, uint64(satoshis))
+	// outout script
+	scriptpubkey, err := P2PKH(pubkey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	upperBuffer.Write(version)     // littleendian = 1
+	upperBuffer.WriteByte(byte(1)) // # inputs
+	upperBuffer.Write(coinbaseInput)
+	upperBuffer.Write(outputIndexBytes)
+	// lowerBuffer
+	lowerBuffer.Write(sequence)
+	lowerBuffer.WriteByte(byte(1)) // # outputs
+	lowerBuffer.Write(amount)      // in satoshis
+	lowerBuffer.WriteByte(byte(len(scriptpubkey)))
+	lowerBuffer.Write(scriptpubkey)
+	lowerBuffer.Write(locktime)
+
+	return upperBuffer.Bytes(), lowerBuffer.Bytes(), nil
 }
 
 // BTC is the number of satoshi in a single bitcoin : 10^8
@@ -239,6 +297,16 @@ func P2PKH(pubkey string) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+// littleEndian returns teh integer value of littleendian encoded byte sequence v
+func littleEndian(v []byte) int {
+	val := 0
+	for i := 0; i < len(v); i++ {
+		pt := int(v[i]) << uint(8*i)
+		val += pt
+	}
+	return val
+}
+
 // assuming we have base58 encoding, this is how we do it, note
 // 76a914 164f1d1d6fce7e2e491352b95b4ea47b880c1546 88ac
 func pkhash2wif() {
@@ -248,19 +316,6 @@ func pkhash2wif() {
 	// (4) 1FA2C09F - grab first 4 bytes
 	// (5) 00164F1D1D6FCE7E2E491352B95B4EA47B880C15461FA2C09F - append to (2) above
 	// (6) 132xe93LdrdGa39vN7su1shRpcBwMdAX4J - base58 encode
-}
-
-// unravel takes a slice (e.g coinbase data) and fills hex data
-func unravel(v []byte) []string {
-	var res []string
-	ptr := 0
-	length := len(v)
-	for ptr < length {
-		m := int(v[ptr])
-		res = append(res, fmt.Sprintf("%x", v[ptr+1:ptr+m+1]))
-		ptr += m + 1
-	}
-	return res
 }
 
 // Transaction type allows to dissemble byte sequence outputs
@@ -280,7 +335,7 @@ func (t Transaction) entry(n int) int {
 	return int(t[n])
 }
 
-// .get returns the  tranasction's slice from s to s+length-1 (an array of size length)
+// .get returns the  transaction's slice from s to s+length-1 (an array of size length)
 func (t Transaction) get(s, length int) []byte {
 	return t[s : s+length]
 }
@@ -293,58 +348,69 @@ func (t Transaction) put(s int, vals []byte) {
 func (t Transaction) detail() {
 	pos := 0
 	fmt.Printf("length: %d\n---------\n", len(t))
-	fmt.Printf("version: %v\n", t.get(0, 4))
+	fmt.Printf("version: %v\n", littleEndian(t.get(0, 4)))
 	pos += 4
 	fmt.Printf("input count: %v\n", t.get(pos, 1))
 	pos++
 	fmt.Printf("input: %x\n", t.get(pos, 32))
 	pos += 32
-	fmt.Printf("[%d] output index: %x\n", pos, t.get(pos, 4))
+	fmt.Printf("output index: %x\n", t.get(pos, 4))
 	pos += 4
 	v := t.entry(pos)
-	fmt.Printf("[%d] length scriptsig: %d\n", pos, t.get(pos, 1))
+	fmt.Printf("length scriptsig: %d\n", t.get(pos, 1))
 	pos++
-	fmt.Printf("[%d] scriptsig: %x\n", pos, t.get(pos, v))
+	fmt.Printf("scriptsig: %x\n", t.get(pos, v))
 	pos += v
 	fmt.Printf("sequence: %x\n", t.get(pos, 4))
 	pos += 4
 	fmt.Printf("output count: %d\n", t.get(pos, 1))
 	pos++
-	fmt.Printf("satoshi (lE): %x\n", t.get(pos, 8))
+	fmt.Printf("satoshi: %d\n", littleEndian(t.get(pos, 8)))
 	pos += 8
 	v = t.entry(pos)
-	fmt.Printf("[%d] length scriptpubkey: %d\n", pos, t.get(pos, 1))
+	fmt.Printf("length scriptpubkey: %d\n", t.get(pos, 1))
 	pos++
-	fmt.Printf("[%d] scriptpubkey: %x\n", pos, t.get(pos, v))
+	fmt.Printf("scriptpubkey: %x\n", t.get(pos, v))
 	pos += v
 	fmt.Printf("locktime: %x\n", t.get(pos, 4))
+}
 
-	if cbdata, err := t.getNonce(); err == nil {
-		fmt.Printf("*********\n%v\n", cbdata)
-		vals := unravel(cbdata)
-		for _, s := range vals {
-			fmt.Println(s)
-		}
+// IncrementNonce raises the nonce value by 1
+func (t Transaction) IncrementNonce() error {
+	val, err := t.getNonce()
+	if err != nil {
+		return err
 	}
+	val++
+	return t.putNonce(val)
 }
 
 // setNonce resets the nnce of a coinbase transaction
-func (t Transaction) setNonce(nonce int) error {
+func (t Transaction) putNonce(nonce int) error {
 	// make sure this is a coinbase txn
 	if t.outindex() != "ffffffff" {
 		return errors.New("not a coinbase transaction")
 	}
+	offset := t[posLenScriptSig+1]
+	start := posLenScriptSig + 2 + offset
+	v := t[start : start+4]
+	fmt.Printf("current: %d\n", littleEndian(v))
+	binary.LittleEndian.PutUint32(v, uint32(nonce))
 	return nil
 }
 
 // getNonce fetches the nonce of a coinbase transaction
-func (t Transaction) getNonce() ([]byte, error) {
+func (t Transaction) getNonce() (int, error) {
 	// make sure this is a coinbase txn
 	if t.outindex() != "ffffffff" {
-		return nil, errors.New("not a coinbase transaction")
+		return -1, errors.New("not a coinbase transaction")
 	}
 	// the coinbase data really scriptsig
-	return t.scriptsig(), nil
+	ss := t.scriptsig()
+	n := int(ss[0])        // either 3 or 4 - bytes length of hex(blockheight)
+	nonce := ss[n+1 : n+5] // followed directly by the extranonce
+
+	return littleEndian(nonce), nil
 }
 
 const posOutIndex = 37     // position of the output index data
