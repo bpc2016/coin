@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 )
 
 // Coming captures the raw data that the server assembles to create
@@ -23,6 +22,7 @@ import (
 // 	Share     int      // lesser target for still-alive messaging
 // }
 
+/*
 // SetTask takes incoming block data in and returns
 // a Task object which a miner uses to search for a winning hash
 func SetTask(Version uint32, PrevBlock string, TimeStamp uint32,
@@ -90,14 +90,13 @@ func SetTask(Version uint32, PrevBlock string, TimeStamp uint32,
 		CoinBase: CoinBase,          // string
 		Skeleton: skeleton,          // slice of 32*n bytes
 	}, nil
-}
+} */
 
-// BlockHeader takes incoming block data in and returns
-// a Task object which a miner uses to search for a winning hash
-func BlockHeader(Version uint32, PrevBlock string, TimeStamp uint32, Bits uint32) ([]byte, error) {
+// BlockHeader returns a template 80 byte blockheader from version/prevblockhash/timestamp/bits
+func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) ([]byte, error) {
 	//Version field
 	version := make([]byte, 4)
-	binary.LittleEndian.PutUint32(version, Version)
+	binary.LittleEndian.PutUint32(version, uint32(Version))
 	// previous block hash
 	prevblock := make([]byte, 32)
 	temp, err := hex.DecodeString(PrevBlock)
@@ -107,39 +106,14 @@ func BlockHeader(Version uint32, PrevBlock string, TimeStamp uint32, Bits uint32
 	prevblock = coin.Reverse(temp)
 	// merkle - blank for now
 	merkle := make([]byte, 32)
-	// time - unix timestamp
+	// time - unix timestamp NOTE uint32(time.Now().Unix())
 	time := make([]byte, 4)
-	binary.LittleEndian.PutUint32(time, TimeStamp)
+	binary.LittleEndian.PutUint32(time, uint32(TimeStamp))
 	// bits (target)
 	bits := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bits, Bits)
-	// nonce - initi 0
+	binary.LittleEndian.PutUint32(bits, uint32(Bits))
+	// nonce - initially 0
 	nonce := make([]byte, 4)
-
-	// // share target
-	// if Share == 0 {
-	// 	Share = 3 // minimum
-	// }
-
-	// Merkle root data
-	// if in.MerkleRoot != "" {
-	// 	merkle = hexToBytes(in.MerkleRoot)
-	// }
-
-	// skeleton := []byte{} // default send empty
-	// if len(TxHashes) > 0 && CoinBase != "" {
-	// 	txes := append([]string{CoinBase}, TxHashes...)
-	// 	mRootStr, skel, err := Merkle(txes)
-	// 	if err == nil {
-	// 		merkle, err = hex.DecodeString(mRootStr)
-	// 		if err != nil {
-	// 			return coin.Task{}, err
-	// 		}
-	// 		skeleton = skel
-	// 	} else {
-	// 		return coin.Task{}, err
-	// 	}
-	// }
 
 	var buffer bytes.Buffer
 	buffer.Write(version)
@@ -150,21 +124,13 @@ func BlockHeader(Version uint32, PrevBlock string, TimeStamp uint32, Bits uint32
 	buffer.Write(nonce)
 
 	return buffer.Bytes(), nil
-	// return coin.Task{
-	// 	BH:       buffer.Bytes(),    // 80 byte slice
-	// 	MH:       merkle,            // 32 byte slice
-	// 	Target:   targetBytes(Bits), // 32 byte slice
-	// 	Share:    share(Share),      // 32 byte slice
-	// 	CoinBase: CoinBase,          // string
-	// 	Skeleton: skeleton,          // slice of 32*n bytes
-	// }, nil
 }
 
-// targetBytes converts uint32 bits to a 32-byte sequence target
+// Bits2Target converts uint32 bits to a 32-byte sequence target
 // which is compared to block hashes. A
 // target is given by m*2**(8*(r-3)) where bits = r|m, r occupying
 // the top byte and m the lower 3 bytes of this uint32.
-func targetBytes(bits uint32) []byte {
+func Bits2Target(bits uint32) []byte {
 	r := bits >> 24           // top byte
 	m := (bits << 8) >> 8     // remaining three bytes
 	b := make([]byte, 32)     // expect 32 byte result but item is shorter
@@ -175,10 +141,10 @@ func targetBytes(bits uint32) []byte {
 	return b
 }
 
-// share  returns a 32 byte sequence with k leading 0's
+// ShareTarget  returns a 32 byte sequence with k leading 0's
 // and the rest of the elements 0xff as a challenge that is
 // easier than the actual target
-func share(k int) []byte {
+func ShareTarget(k int) []byte {
 	byteseq := make([]byte, k)
 	for i := 0; i < 32-k; i++ {
 		byteseq = append(byteseq, 0xff)
@@ -186,35 +152,38 @@ func share(k int) []byte {
 	return byteseq
 }
 
-// Merkle takes a list of transaction hashes (hex strings), reverses each one then
-// computes the Merkle root which is then reversed.
+// Merkle computes the merkleroot hash and a skeleton from coinbase and transactions list
+func Merkle(coinbase string, txns []string) ([]byte, []byte, error) {
+	txes := append([]string{coinbase}, txns...)
+	return merKle(txes)
+}
+
+// merKle takes a list of transaction hashes (hex strings), reverses each one then
+// computes the Merkle root as a byte sequence.
 //
 // The reversals are to accomodate the use case of Merkle root of the list of
 // hashes of transactions in a Block
 //
 // It also returns a byte sequence 'skeleton' of the  Merkle root computations which,
 // together with the first transaction, can be used to regenerate the root quickly
-func Merkle(list []string) (string, []byte, error) {
-
+func merKle(list []string) ([]byte, []byte, error) {
 	// convert the hex strings to bytes, reversed
 	bytelist := make([][]byte, len(list))
 	for i, s := range list {
 		b, err := hex.DecodeString(s)
 		if err != nil {
-			return "", nil, err
+			return nil, nil, err
 		}
 		bytelist[i] = coin.Reverse(b)
 	}
-
-	// use private merkleBytes to workon the byte sequences
+	// use private merkleBytes to work on the byte sequences
 	resBytes, skeleton, err := merkleBytes(bytelist)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
-
 	// protocol demands a final reversal
-	resStr := fmt.Sprintf("%x", coin.Reverse(resBytes))
-	return resStr, skeleton, nil
+	mHashBytes := coin.Reverse(resBytes)
+	return mHashBytes, skeleton, nil
 }
 
 // merkleBytes takes list txs of byte sequences and returns
@@ -261,4 +230,21 @@ func merkleBytes(txs [][]byte) ([]byte, []byte, error) {
 		}
 	}
 	return txs[0], skeleton, nil
+}
+
+// Skel2Merkle takes Skeleton and Coinbase an computes the Merkle root (in hex)
+func Skel2Merkle(coinbase string, skeleton []byte) ([]byte, error) {
+	N := len(skeleton) / 32 // the number of partial hashes = loops
+	cbBytes, err := hex.DecodeString(coinbase)
+	if err != nil {
+		return nil, err
+	}
+	// we need to reverse coinbase
+	part := coin.Reverse(cbBytes)
+	// then climb up the tree
+	for i := 0; i < N; i++ {
+		part = coin.Hash2(part, skeleton[32*i:32*(i+1)])
+	}
+	root := coin.Reverse(part)
+	return root, nil
 }
