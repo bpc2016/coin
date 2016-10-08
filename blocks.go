@@ -1,4 +1,4 @@
-// Package b implemenets bitcoin mining - the blocks file
+// Package coin implemenets bitcoin mining - the blocks file
 // contains blockheader material
 package coin
 
