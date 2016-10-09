@@ -172,7 +172,7 @@ func main() {
 		u, l, b := newBlock()
 		// OMIT
 		for _, c := range servers {
-			go func(c cpb.CoinClient, newBlock string, // HL
+			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
 				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Upper: u, Lower: l, Blockheight: b})
@@ -192,7 +192,7 @@ func main() {
 				serverUpChan <- r.Work // HL
 				// in parallel - seek cancellation
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
-			}(c, newBlock, stopLooking, endLoop, theWinner, lateEntry)
+			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
 		//  collect the work request acks from servers b OMIT
 		for c := range alive {
