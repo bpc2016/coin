@@ -32,9 +32,15 @@ type lockMap struct {
 	loggedIn map[string]int
 }
 
-type lockString struct {
+type blockdata struct {
+	u      []byte
+	l      []byte
+	height uint32
+}
+
+type lockBlock struct {
 	sync.Mutex
-	data string
+	data blockdata
 }
 
 type lockChan struct {
@@ -45,12 +51,12 @@ type lockChan struct {
 
 var (
 	users      lockMap
-	block      lockString     // models the block information - basis of 'work'
+	block      lockBlock      // models the block information - basis of 'work'
 	run        lockChan       // channel that controls start of run
 	signIn     chan string    // for registering users in getwork
 	signOut    chan string    // for registering leaving users in getcancel
 	stop       sync.WaitGroup // control cancellation issue
-	blockchan  chan string    // for incoming block
+	blockchan  chan blockdata // for incoming block
 	resultchan chan cpb.Win   // for the winner decision
 )
 
@@ -73,11 +79,14 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	<-run.ch          // HL
 
 	block.Lock()
-	// minername := fmt.Sprintf("%d:%s", *index, in.Name)
-	// miner := users.loggedIn[in.Name]
-	// blockBytes, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
-	// fatalF("failed to set block data", err)
-	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
+	minername := fmt.Sprintf("%d:%s", *index, in.Name)
+	miner := users.loggedIn[in.Name]
+	upper := block.data.u
+	lower := block.data.l
+	blockHeight := block.data.height
+	coinbaseBytes, err := coin.GenCoinbase(upper, lower, int(blockHeight), miner, minername)
+	fatalF("failed to set block data", err)
+	work := &cpb.Work{Coinbase: coinbaseBytes, Block: []byte("fix me")}
 	block.Unlock()
 	return &cpb.GetWorkReply{Work: work}, nil
 }
@@ -112,7 +121,7 @@ type server struct{}
 
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
-	blockchan <- in.Block
+	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight}
 	users.loggedIn["EXTERNAL"] = 1 // we login conductor here
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
@@ -184,7 +193,7 @@ func main() {
 
 	signIn = make(chan string, *numMiners)  // register incoming miners
 	signOut = make(chan string, *numMiners) // register miners receipt of cancel instructions
-	blockchan = make(chan string, 1)        // transfer block data
+	blockchan = make(chan blockdata, 1)     // transfer block data
 	run.ch = make(chan struct{})            // signal to start mining
 	resultchan = make(chan cpb.Win)         // transfer solution data
 

@@ -90,7 +90,7 @@ message GetResultReply {
 }
 
 message Work {
-  string coinbase = 1;
+  bytes coinbase = 1;
   bytes block = 2;  
 }
 
