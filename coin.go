@@ -13,6 +13,9 @@ import (
 	"log"
 )
 
+// Block is the blockheaderobject - 80 bytes
+type Block []byte
+
 // Task type is the set of byte slices that each client receives.
 // Ultimately, the blockheader is filled then its double hash compared
 // to target

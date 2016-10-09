@@ -102,9 +102,9 @@ func coinbaseData(bh int, extra int, minerid int, miner string) ([]byte, error) 
 // GenCoinbase creates a  coinbase transaction given slices upperTemplate, lowerTemplate
 // which represent the parts of the txn aside from the coinbasedata
 func GenCoinbase(upperTemplate []byte, lowerTemplate []byte,
-	blockHeight int, miner int, minerlist []string) ([]byte, error) {
+	blockHeight int, miner int, minerstring string) ([]byte, error) {
 	// contruct the coinbasedata, extranince=0
-	coinbasedata, err := coinbaseData(blockHeight, 0, miner, minerlist[miner])
+	coinbasedata, err := coinbaseData(blockHeight, 0, miner, minerstring)
 	if err != nil {
 		return nil, err
 	}

@@ -1,10 +1,10 @@
 // Package coin implemenets bitcoin mining - the blocks file
 // contains blockheader material
-package coin
+package coinb
 
 import (
 	"bytes"
-	//"coin"
+	"coin"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -23,7 +23,7 @@ original idea was a task object:
 } */
 
 // BlockHeader returns a template 80 byte blockheader from version/prevblockhash/timestamp/bits
-func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) ([]byte, error) {
+func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) (coin.Block, error) {
 	//Version field
 	version := make([]byte, 4)
 	binary.LittleEndian.PutUint32(version, uint32(Version))
@@ -33,7 +33,7 @@ func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	prevblock = Reverse(temp)
+	prevblock = coin.Reverse(temp)
 	// merkle - blank for now
 	merkle := make([]byte, 32)
 	// time - unix timestamp NOTE uint32(time.Now().Unix())
@@ -53,7 +53,7 @@ func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) ([]byte
 	buffer.Write(bits)
 	buffer.Write(nonce)
 
-	return buffer.Bytes(), nil
+	return coin.Block(buffer.Bytes()), nil
 }
 
 // Bits2Target converts uint32 bits to a 32-byte sequence target
@@ -104,7 +104,7 @@ func merKle(list []string) ([]byte, []byte, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		bytelist[i] = Reverse(b)
+		bytelist[i] = coin.Reverse(b)
 	}
 	// use private merkleBytes to work on the byte sequences
 	resBytes, skeleton, err := merkleBytes(bytelist)
@@ -112,7 +112,7 @@ func merKle(list []string) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	// protocol demands a final reversal
-	mHashBytes := Reverse(resBytes)
+	mHashBytes := coin.Reverse(resBytes)
 	return mHashBytes, skeleton, nil
 }
 
@@ -144,7 +144,7 @@ func merkleBytes(txs [][]byte) ([]byte, []byte, error) {
 			if i == L {
 				break
 			}
-			txs[M] = Hash2(txs[i], txs[i+1])
+			txs[M] = coin.Hash2(txs[i], txs[i+1])
 			i, M = i+2, M+1
 			if M == 1 { // extend skeleton byte
 				skeleton = append(skeleton, txs[1]...)
@@ -170,11 +170,11 @@ func Skel2Merkle(coinbase string, skeleton []byte) ([]byte, error) {
 		return nil, err
 	}
 	// we need to reverse coinbase
-	part := Reverse(cbBytes)
+	part := coin.Reverse(cbBytes)
 	// then climb up the tree
 	for i := 0; i < N; i++ {
-		part = Hash2(part, skeleton[32*i:32*(i+1)])
+		part = coin.Hash2(part, skeleton[32*i:32*(i+1)])
 	}
-	root := Reverse(part)
+	root := coin.Reverse(part)
 	return root, nil
 }

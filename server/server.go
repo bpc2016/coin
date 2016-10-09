@@ -73,6 +73,10 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	<-run.ch          // HL
 
 	block.Lock()
+	// minername := fmt.Sprintf("%d:%s", *index, in.Name)
+	// miner := users.loggedIn[in.Name]
+	// blockBytes, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
+	// fatalF("failed to set block data", err)
 	work := &cpb.Work{Coinbase: in.Name, Block: []byte(block.data)}
 	block.Unlock()
 	return &cpb.GetWorkReply{Work: work}, nil
@@ -161,8 +165,8 @@ done:
 
 // coinbase accepts data from work, result is tailored to miner
 func coinbase(upper []byte, lower []byte, blockHeight int,
-	miner int, minerlist []string) coin.Transaction {
-	txn, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minerlist)
+	miner int, minername string) coin.Transaction {
+	txn, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
 	fatalF("failed to generate coinbase transaction", err)
 	// fmt.Printf("%x", txn)
 	return coin.Transaction(txn) // convert to a transaction type
