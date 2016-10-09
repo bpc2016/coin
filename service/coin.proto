@@ -48,7 +48,8 @@ message GetCancelRequest {
 
 // IssueBlock requests carries the string block
 message IssueBlockRequest {
-  string block = 1;
+  bytes upper = 1;
+  bytes lower = 2;
 }
 
 // GetResult requests carries the same name as login
