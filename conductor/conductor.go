@@ -134,7 +134,7 @@ func debugF(format string, args ...interface{}) {
 	}
 }
 
-func newBlock() (upper, lower []byte, blockheight int) {
+func newBlock() (upper, lower []byte, blockheight uint32) {
 	blockHeight := 433789
 	blockFees := 8756123 // satoshi
 	pubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
@@ -144,7 +144,7 @@ func newBlock() (upper, lower []byte, blockheight int) {
 		log.Fatalf("failed to generate coinbase: %v", err)
 	}
 	// sends upper, lower , blockHeight --> server
-	return upper, lower, blockHeight
+	return upper, lower, uint32(blockHeight)
 }
 
 func main() {
@@ -168,13 +168,14 @@ func main() {
 		serverUpChan := make(chan *cpb.Work, *numServers) // for gathering signins OMIT
 		lateEntry := make(chan struct{})                  // no more results please OMIT
 		theWinner := make(chan string, *numServers)       //  OMIT
-		newBlock := fmt.Sprintf("BLOCK: %v", time.Now())  // next block
+		//newBlock := fmt.Sprintf("BLOCK: %v", time.Now())  // next block
+		u, l, b := newBlock()
 		// OMIT
 		for _, c := range servers {
 			go func(c cpb.CoinClient, newBlock string, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
-				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Block: newBlock})
+				_, err := c.IssueBlock(context.Background(), &cpb.IssueBlockRequest{Upper: u, Lower: l, Blockheight: b})
 				if skipF(c, "could not issue block", err) {
 					return
 				}
