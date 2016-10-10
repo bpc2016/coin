@@ -24,8 +24,8 @@ var (
 )
 
 // annouceWin is what causes the server to issue a cancellation
-func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
-	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
+func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) bool {
+	win := &cpb.Win{Block: block, Nonce: nonce, Identity: winner}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if skipF("could not announce win", err) {
 		return false
@@ -60,6 +60,7 @@ func rolls(n int) bool {
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
 func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
+	// we must combine teh coinbase + rest of block here ...
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second)
@@ -132,14 +133,14 @@ func main() {
 			work = r.Work                        // HL
 			stopLooking = make(chan struct{}, 1) // HL
 			endLoop = make(chan struct{}, 1)     // HL
-			// look out for cancellation
+			// look out for  cancellation
 			go getCancel(c, name, stopLooking, endLoop) // HL
 			// search blocks
 			theNonce, ok = search(work, stopLooking) // HL
 			if ok {                                  // we completed search
 				fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
-				win := annouceWin(c, theNonce, work.Coinbase) // HL
-				if win {                                      // late?
+				win := annouceWin(c, theNonce, work.Block, name) // HL
+				if win {                                         // late?
 					fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
 				}
 			}

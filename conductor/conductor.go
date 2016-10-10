@@ -76,8 +76,8 @@ func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry c
 		return
 	}
 
-	if res.Winner.Coinbase != "EXTERNAL" { // avoid echoes
-		declareWin(theWinner, lateEntry, res.Index, res.Winner.Coinbase, res.Winner.Nonce) // HL
+	if res.Winner.Identity != "EXTERNAL" { // avoid echoes
+		declareWin(theWinner, lateEntry, res.Index, res.Winner.Identity, res.Winner.Nonce) // HL
 	}
 }
 
@@ -98,14 +98,15 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 			if uint32(i) == index || !alive[c] {
 				continue
 			}
-			annouceWin(c, 99, "EXTERNAL") // bogus announcement
+			annouceWin(c, 99, []byte{}, "EXTERNAL") // bogus  announcement
 		}
 	}
 }
 
-// annouceWin is what causes the server to issue a cancellation
-func annouceWin(c cpb.CoinClient, nonce uint32, coinbase string) bool {
-	win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
+// annouceWin is what causes the server to issue a  cancellation
+func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) bool {
+	win := &cpb.Win{Block: block, Nonce: nonce, Identity: winner}
+	// win := &cpb.Win{Coinbase: coinbase, Nonce: nonce}
 	r, err := c.Announce(context.Background(), &cpb.AnnounceRequest{Win: win})
 	if skipF(c, "could not announce win", err) {
 		return false

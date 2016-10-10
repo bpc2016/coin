@@ -98,7 +98,7 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	if run.winnerFound {
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
-	// we have a winner
+	// we have a  winner
 	run.winnerFound = true  // HL
 	resultchan <- *soln.Win // HL
 	fmt.Println("starting signout numminers = ", *numMiners)
