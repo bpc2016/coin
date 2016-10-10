@@ -95,6 +95,5 @@ message Work {
 }
 
 message Win {
-  string coinbase = 1;
-  uint32 nonce = 2;  
+  bytes block = 1; // wil include the winning nonce  
 }
