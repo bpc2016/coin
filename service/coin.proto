@@ -95,5 +95,7 @@ message Work {
 }
 
 message Win {
-  bytes block = 1; // wil include the winning nonce  
+  bytes block = 1;    // will include the winning nonce and winner 
+  uint32 nonce = 2;   // this is for the toy version 
+  string identity = 3; // ditto
 }
