@@ -51,6 +51,7 @@ message IssueBlockRequest {
   bytes upper = 1;
   bytes lower = 2;
   uint32 blockheight =3;
+  bytes block = 4;
 }
 
 // GetResult requests carries the same name as login
