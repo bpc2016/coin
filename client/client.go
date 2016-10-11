@@ -60,7 +60,7 @@ func rolls(n int) bool {
 
 // search tosses two dice waiting for a double 5. exit on cancel or win
 func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
-	// we must combine teh coinbase + rest of block here  ...
+	// we must combine the coinbase + rest of block here  ...
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second)
