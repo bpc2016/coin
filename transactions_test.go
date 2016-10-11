@@ -12,7 +12,7 @@ func piece(a int, b int, v []byte, label string) []byte {
 }
 
 func TestCoinbaseData(t *testing.T) {
-	testbh := 19839016
+	testbh := uint32(19839016)
 	testextra := 129456
 	testminerid := 261789
 	testminer := "an Arbitrarily long name ? again!:"
@@ -30,12 +30,12 @@ func TestCoinbaseData(t *testing.T) {
 	}
 	nce := piece(n+1, n+4, cb, "extranonce")
 	h1 = littleEndian(nce)
-	if h1 != testextra {
+	if int(h1) != testextra {
 		t.Errorf("extranonce error %d != %d", h1, testextra)
 	}
 	p = piece(n+5, n+7, cb, "miner id")
 	h1 = littleEndian(p)
-	if h1 != testminerid {
+	if h1 != uint32(testminerid) {
 		t.Errorf("miner id error %d != %d", h1, testminerid)
 	}
 	p = piece(n+8, n+8+20-1, cb, "miner hash")
@@ -92,7 +92,7 @@ func TestCoinBase(t *testing.T) {
 } */
 
 func TestApplication(t *testing.T) {
-	testblockHeight := 433789
+	testblockHeight := uint32(433789)
 	testblockFees := 8756123 // satoshi
 	testpubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
 	testminer := 1 // the second, below
@@ -100,7 +100,7 @@ func TestApplication(t *testing.T) {
 	testTxn := "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff28037d9e0600000000010000122576d604d82a71b7747c1fa7db6fe79abd298b2f5a6f6368657a612fffffffff011b18074b000000001976a914164f1d1d6fce7e2e491352b95b4ea47b880c154688ac00000000"
 
 	// conductor generates this ..
-	upper, lower, err := CoinbaseTemplates(testblockHeight, testblockFees, testpubkey)
+	upper, lower, err := CoinbaseTemplates(uint32(testblockHeight), testblockFees, testpubkey)
 	if err != nil {
 		t.Error(err)
 	}

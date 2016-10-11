@@ -214,10 +214,10 @@ func P2PKH(pubkey string) ([]byte, error) {
 }
 
 // littleEndian returns the integer value of littleendian encoded byte sequence v
-func littleEndian(v []byte) int {
-	val := 0
+func littleEndian(v []byte) uint32 {
+	val := uint32(0)
 	for i := 0; i < len(v); i++ {
-		pt := int(v[i]) << uint(8*i)
+		pt := uint32(v[i]) << uint(8*i)
 		val += pt
 	}
 	return val
@@ -237,7 +237,7 @@ func (t Transaction) IncrementNonce() error {
 }
 
 // putNonce sets the nonce of a coinbase transaction
-func (t Transaction) putNonce(nonce int) error {
+func (t Transaction) putNonce(nonce uint32) error {
 	// make sure this is a coinbase txn
 	if t.outindex() != "ffffffff" {
 		return errors.New("not a coinbase transaction")
@@ -246,15 +246,15 @@ func (t Transaction) putNonce(nonce int) error {
 	start := posLenScriptSig + 2 + offset
 	v := t[start : start+4]
 	fmt.Printf("current: %d\n", littleEndian(v))
-	binary.LittleEndian.PutUint32(v, uint32(nonce))
+	binary.LittleEndian.PutUint32(v, nonce)
 	return nil
 }
 
 // getNonce fetches the nonce of a coinbase transaction
-func (t Transaction) getNonce() (int, error) {
+func (t Transaction) getNonce() (uint32, error) {
 	// make sure this is a coinbase txn
 	if t.outindex() != "ffffffff" {
-		return -1, errors.New("not a coinbase transaction")
+		return 0, errors.New("not a coinbase transaction")
 	}
 	// the coinbase data really scriptsig
 	ss := t.scriptsig()
