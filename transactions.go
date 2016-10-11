@@ -56,15 +56,15 @@ we will set this as a 'const'
 */
 
 // coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase
-func coinbaseData(bh int, extra int, minerid int, miner string) ([]byte, error) {
+func coinbaseData(bh uint32, extra int, minerid int, miner string) ([]byte, error) {
 	bhlen := 4                    // max length of blockheight data
 	bhMaxBytes := make([]byte, 4) // will accomodate largest possible blockheighth of 500 million
-	binary.LittleEndian.PutUint32(bhMaxBytes, uint32(bh))
+	binary.LittleEndian.PutUint32(bhMaxBytes, bh)
 	// decide the actual length required
 	for bhMaxBytes[bhlen-1] == 0 {
 		bhlen--
 	}
-	// the desired slice
+	// bytes sequence with the desired slice
 	blockHeight := bhMaxBytes[0:bhlen]
 	// extranonce
 	extranonce := make([]byte, extralen) // 4 bytes
@@ -102,7 +102,7 @@ func coinbaseData(bh int, extra int, minerid int, miner string) ([]byte, error) 
 // GenCoinbase creates a  coinbase transaction given slices upperTemplate, lowerTemplate
 // which represent the parts of the txn aside from the coinbasedata
 func GenCoinbase(upperTemplate []byte, lowerTemplate []byte,
-	blockHeight int, miner int, minerstring string) ([]byte, error) {
+	blockHeight uint32, miner int, minerstring string) ([]byte, error) {
 	// contruct the coinbasedata, extranince=0
 	coinbasedata, err := coinbaseData(blockHeight, 0, miner, minerstring)
 	if err != nil {
@@ -118,7 +118,7 @@ func GenCoinbase(upperTemplate []byte, lowerTemplate []byte,
 }
 
 // CoinbaseTemplates is what the server uses to deploy the upper & lower templates
-func CoinbaseTemplates(blockHeight int, blockFees int, pubkey string) (upper, lower []byte, err error) {
+func CoinbaseTemplates(blockHeight uint32, blockFees int, pubkey string) (upper, lower []byte, err error) {
 	var upperBuffer, lowerBuffer bytes.Buffer
 
 	//Version field
@@ -158,7 +158,7 @@ func CoinbaseTemplates(blockHeight int, blockFees int, pubkey string) (upper, lo
 }
 
 // calculate the mining reward at this height
-func getValue(blockHeight int) int {
+func getValue(blockHeight uint32) int {
 	subsidy := 50 * BTC
 	halvings := uint(blockHeight / HalvingInterval)
 	if halvings >= 64 {
