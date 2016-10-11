@@ -77,18 +77,22 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	debugF("Work request: %+v\n", in)
 	signIn <- in.Name // HL
 	<-run.ch          // HL
+	// customise work for this miner
+	work := setWork(in.Name)
+	return &cpb.GetWorkReply{Work: work}, nil
+}
 
+func setWork(name string) *cpb.Work {
 	block.Lock()
-	minername := fmt.Sprintf("%d:%s", *index, in.Name)
-	miner := users.loggedIn[in.Name]
+	minername := fmt.Sprintf("%d:%s", *index, name)
+	miner := users.loggedIn[name]
 	upper := block.data.u
 	lower := block.data.l
 	blockHeight := block.data.height
-	coinbaseBytes, err := coin.GenCoinbase(upper, lower, int(blockHeight), miner, minername)
+	coinbaseBytes, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
 	fatalF("failed to set block data", err)
-	work := &cpb.Work{Coinbase: coinbaseBytes, Block: []byte("fix me")}
 	block.Unlock()
-	return &cpb.GetWorkReply{Work: work}, nil
+	return &cpb.Work{Coinbase: coinbaseBytes, Block: []byte("fix me")}
 }
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
@@ -173,13 +177,13 @@ done:
 }
 
 // coinbase accepts data from work, result is tailored to miner
-func coinbase(upper []byte, lower []byte, blockHeight int,
-	miner int, minername string) coin.Transaction {
-	txn, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
-	fatalF("failed to generate coinbase transaction", err)
-	// fmt.Printf("%x", txn)
-	return coin.Transaction(txn) // convert to a transaction type
-}
+// func coinbase(upper []byte, lower []byte, blockHeight int,
+// 	miner int, minername string) coin.Transaction {
+// 	txn, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
+// 	fatalF("failed to generate coinbase transaction", err)
+// 	// fmt.Printf("%x", txn)
+// 	return coin.Transaction(txn) // convert to a transaction type
+// }
 
 func main() {
 	flag.Parse() // HL
