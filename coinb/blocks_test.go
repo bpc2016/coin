@@ -141,6 +141,24 @@ func TestMerkle(t *testing.T) {
 	}
 }
 
+func TestSkeleton(t *testing.T) {
+	coinbase := txHashes[0] // the first
+	txns := txHashes[1:]    // the rest
+	_, skel, err := Merkle(coinbase, txns)
+	if err != nil {
+		t.Error(err)
+	}
+	expected := fmt.Sprintf("%x", skel)
+	skel2, err := Skeleton(txns)
+	if err != nil {
+		t.Error(err)
+	}
+	hexgot := fmt.Sprintf("%x", skel2)
+	if hexgot != expected {
+		t.Errorf("\nExp: %s\nGot: %s\n", expected, hexgot)
+	}
+}
+
 /*
 func TestGetMerkle(t *testing.T) {
 	test := tests[4] 				// only one we have complete data for

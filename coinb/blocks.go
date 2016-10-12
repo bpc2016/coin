@@ -178,3 +178,11 @@ func Skel2Merkle(coinbase string, skeleton []byte) ([]byte, error) {
 	root := coin.Reverse(part)
 	return root, nil
 }
+
+// Skeleton produces just the skeleton - NO coinbase involved given list txns of hashed txns in hex
+func Skeleton(txns []string) ([]byte, error) {
+	any := "0000000000000000000000000000000000000000000000000000000000000000" // 32 bytes of 0
+	txes := append([]string{any}, txns...)
+	_, b, err := merKle(txes) // we dont want the bogus merkle root
+	return b, err
+}
