@@ -29,11 +29,11 @@ const HalvingInterval = 210000
 
 /*
 The only convention followed in contructing the coinbase 'scritpsig' is that it carry
-the block height at teh beginning - in lower Endian - together with the number of bytes
+the block height at the beginning - in lower Endian - together with the number of bytes
 this occupies, so bh = 277316 => coinbasedata starts with 003443b04, since 0x043b44
 is hex for 277316. The only other limitation is that the script has a max length 100
 and that the following data ususally encodes the 'extra nonce' and the identity of the
-mining pool. We will thus fix teh following:
+mining pool. We will thus fix the following:
 	bhlen - 1 byte
 	bh - 3/4 bytes
 	extranonce - 4 bytes
@@ -43,7 +43,7 @@ mining pool. We will thus fix teh following:
 where
 1. miner hash is encoded using hash160 - so the true extranonce is
 miner = hash160(miner identity+extranonce)
-this makes verifiaction of teh winner easy all around: users will have a directory of
+this makes verifiaction of the winner easy all around: users will have a directory of
 miner identities, and we assume fewer than 2^24 = 16,777,216 miners and that the speed
 of each will be such that we do not need to exhaust all 2^32 = 4,294,967,296 extra
 nonce space.
@@ -53,6 +53,7 @@ we will set this as a 'const'
 	coinbaseData(bh, enonce, minerid) - will require map: minerid -> miner identity
 	extract(key string) - to get bh, extranonce, miner id, minerhash
 	IncrementNonce() - increment extra nonce, return new coinbasedata
+4.  NOTE THAT THE LENGTH OF THIS SCRIPT IS NOT FIXED
 */
 
 // coinbaseData is the alternative to scriptSig ("unlocking" script) in a coinbase

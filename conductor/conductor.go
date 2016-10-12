@@ -135,9 +135,9 @@ func debugF(format string, args ...interface{}) {
 	}
 }
 
-func newBlock() (upper, lower []byte, blockheight uint32) {
-	blockHeight := uint32(433789)
-	blockFees := 8756123 // satoshis
+func newBlock() (upper, lower []byte, blockheight uint32) { // TODO - this data NOT fixed
+	blockHeight := uint32(433789) // should come from unix time
+	blockFees := 8756123          // satoshis
 	pubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
 	// conductor generates this ...
 	upper, lower, err := coin.CoinbaseTemplates(blockHeight, blockFees, pubkey)
