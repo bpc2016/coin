@@ -1,4 +1,4 @@
-package coinb
+package coin
 
 import (
 	"fmt"
