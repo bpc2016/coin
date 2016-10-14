@@ -136,7 +136,7 @@ func debugF(format string, args ...interface{}) {
 }
 
 // newBlock packages the block information that becomes 'work' for each run
-func newBlock() (upper, lower []byte, blockheight uint32) { // TODO - this data NOT fixed
+func newBlock() (upper, lower, bheader, merkle []byte, blockheight uint32) { // TODO - this data NOT fixed
 	blockHeight := uint32(433789) // should come from unix time
 	blockFees := 8756123          // satoshis
 	pubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
@@ -145,12 +145,12 @@ func newBlock() (upper, lower []byte, blockheight uint32) { // TODO - this data 
 	if err != nil {
 		log.Fatalf("failed to generate coinbase: %v", err)
 	}
-	// bheader := blockHeader() // call for a blockheader template
-
-	// merkle := merkleRoot() // fetch the  skeleton mr
-
+	// call for a blockheader template
+	bheader = blockHeader()
+	// fetch the  skeleton mr
+	merkle = merkleRoot()
 	// sends upper, lower , blockHeight --> server
-	return upper, lower, blockHeight //,bheader, merkle
+	return upper, lower, bheader, merkle, blockHeight
 }
 
 // blockHeader supplies the 80 byte bh template
@@ -298,15 +298,19 @@ func main() {
 		serverUpChan := make(chan *cpb.Work, *numServers) // for gathering signins OMIT
 		lateEntry := make(chan struct{})                  // no more results please OMIT
 		theWinner := make(chan string, *numServers)       //  OMIT
-		//newBlock := fmt.Sprintf("BLOCK: %v", time.Now())  // next block
-		u, l, h := newBlock()
+		u, l, b, m, h := newBlock()                       // next block
 		// OMIT
 		for _, c := range servers {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
 				_, err := c.IssueBlock(context.Background(),
-					&cpb.IssueBlockRequest{Upper: u, Lower: l, Blockheight: h})
+					&cpb.IssueBlockRequest{
+						Upper:       u,
+						Lower:       l,
+						Block:       b,
+						Merkle:      m,
+						Blockheight: h})
 				if skipF(c, "could not issue block", err) {
 					return
 				}
