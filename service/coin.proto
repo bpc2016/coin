@@ -48,10 +48,11 @@ message GetCancelRequest {
 
 // IssueBlock requests carries the string block
 message IssueBlockRequest {
-  bytes upper = 1;
-  bytes lower = 2;
-  uint32 blockheight =3;
-  bytes block = 4;
+  bytes upper = 1;        // coinbase upper
+  bytes lower = 2;        // coinbase lower
+  uint32 blockheight =3;  // the current block height
+  bytes block = 4;        // blockheader
+  bytes merkle = 5;       // merkle root skeleton
 }
 
 // GetResult requests carries the same name as login
