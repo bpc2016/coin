@@ -92,8 +92,9 @@ message GetResultReply {
 }
 
 message Work {
-  bytes coinbase = 1;
-  bytes block = 2;  
+  bytes coinbase = 1; // coinbase byte seq
+  bytes block = 2;    // partial block header
+  bytes skel = 3;     // merkle root skeleton 
 }
 
 message Win {
