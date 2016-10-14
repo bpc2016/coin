@@ -33,10 +33,11 @@ type lockMap struct {
 }
 
 type blockdata struct {
-	u      []byte
-	l      []byte
-	height uint32
-	blk    []byte
+	u      []byte // upper coinbase
+	l      []byte // lower coinbase
+	height uint32 // blockheight
+	blk    []byte // 80 byte block header partially filled
+	merk   []byte // merkle root skeleton - multiple of 32 bytes
 }
 
 type lockBlock struct {
@@ -85,7 +86,7 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 
 func setWork(name string) *cpb.Work {
 	if name == "EXTERNAL" {
-		return &cpb.Work{Coinbase: []byte{}, Block: []byte{}}
+		return &cpb.Work{Coinbase: []byte{}, Block: []byte{}, Skel: []byte{}}
 	}
 	block.Lock()
 	minername := fmt.Sprintf("%d:%s", *index, name)
@@ -94,12 +95,13 @@ func setWork(name string) *cpb.Work {
 	lower := block.data.l
 	blockHeight := block.data.height
 	partblock := block.data.blk
+	merkSkel := block.data.merk
 	// generate actual coinbase txn
 	coinbaseBytes, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
 	fatalF("failed to set block data", err)
 	block.Unlock()
 	fmt.Printf("miner: %s\ncoinbase:\n%x\n", minername, coinbaseBytes)
-	return &cpb.Work{Coinbase: coinbaseBytes, Block: partblock}
+	return &cpb.Work{Coinbase: coinbaseBytes, Block: partblock, Skel: merkSkel}
 }
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
@@ -132,7 +134,7 @@ type server struct{}
 
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
-	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block}
+	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle}
 	users.loggedIn["EXTERNAL"] = 1 // we login conductor here
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
