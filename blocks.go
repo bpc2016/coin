@@ -9,6 +9,10 @@ import (
 	"errors"
 )
 
+const (
+	mrposition = 36 // start of merkel root in block
+)
+
 /*
 original idea was a task object:
 	return coin.Task{
@@ -45,12 +49,12 @@ func BlockHeader(Version int, PrevBlock string, TimeStamp int, Bits int) (Block,
 	nonce := make([]byte, 4)
 
 	var buffer bytes.Buffer
-	buffer.Write(version)
-	buffer.Write(prevblock)
-	buffer.Write(merkle)
-	buffer.Write(time)
-	buffer.Write(bits)
-	buffer.Write(nonce)
+	buffer.Write(version)   // 4
+	buffer.Write(prevblock) // 32
+	buffer.Write(merkle)    // 32
+	buffer.Write(time)      // 4
+	buffer.Write(bits)      // 4
+	buffer.Write(nonce)     // 4
 
 	return Block(buffer.Bytes()), nil
 }
@@ -184,4 +188,15 @@ func Skeleton(txns []string) ([]byte, error) {
 	txes := append([]string{any}, txns...)
 	_, b, err := merKle(txes) // we dont want the bogus merkle root
 	return b, err
+}
+
+// below we use the coin.Block type [really 80 bytes] byte sequence
+
+// AddMerkle is used to dynamicaly load new Merkkle hashes
+func (b Block) AddMerkle(mrhash []byte) error {
+	if len(mrhash) != 32 {
+		return errors.New("wrong merkle root hash size")
+	}
+	copy(b[mrposition:], mrhash)
+	return nil
 }
