@@ -169,12 +169,12 @@ func merkleBytes(txs [][]byte) ([]byte, []byte, error) {
 //TODO - below should use []byte , noyt string for coinbase
 
 // Skel2Merkle takes Skeleton and Coinbase an computes the Merkle root (in hex)
-func Skel2Merkle(coinbase string, skeleton []byte) ([]byte, error) {
+func Skel2Merkle(cbBytes []byte, skeleton []byte) ([]byte, error) {
 	N := len(skeleton) / 32 // the number of partial hashes = loops
-	cbBytes, err := hex.DecodeString(coinbase)
-	if err != nil {
-		return nil, err
-	}
+	// cbBytes, err := hex.DecodeString(coinbase)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	// we need to reverse coinbase
 	part := Reverse(cbBytes)
 	// then climb up the tree

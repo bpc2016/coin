@@ -1,6 +1,7 @@
 package coin
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -133,8 +134,12 @@ func TestMerkle(t *testing.T) {
 	if hexgot != mRoot {
 		t.Errorf("\nExp: %v\nGot: %v\n", mRoot, hexgot)
 	}
+	coinbytes, err := hex.DecodeString(coinbase)
+	if err != nil {
+		t.Error(err)
+	}
 	// check that the skeleton also works ...
-	mr2, err := Skel2Merkle(coinbase, skel)
+	mr2, err := Skel2Merkle(coinbytes, skel)
 	hexgot = fmt.Sprintf("%x", mr2)
 	if hexgot != mRoot {
 		t.Errorf("\nExp: %v\nGot: %v\n", mRoot, hexgot)
@@ -159,7 +164,7 @@ func TestSkeleton(t *testing.T) {
 	}
 }
 
-func TestAddMerkle(t *testing.T) {
+func TestAddMrk(t *testing.T) {
 	testBlock := make(Block, 80)
 	mrhash := make([]byte, 32)
 	for i := range mrhash {
