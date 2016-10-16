@@ -159,6 +159,22 @@ func TestSkeleton(t *testing.T) {
 	}
 }
 
+func TestAddMerkle(t *testing.T) {
+	testBlock := make(Block, 80)
+	mrhash := make([]byte, 32)
+	for i := range mrhash {
+		mrhash[i] = 0xff
+	}
+	testBlock[36+32] = 0xee       // boundary
+	fmt.Printf("%x\n", testBlock) // before
+	err := testBlock.AddMerkle(mrhash)
+	if err != nil {
+		t.Error(err)
+	}
+	// a reminder that b[p:q] has length q-p, starts at b[p]
+	fmt.Printf("%x\n%x\n%x\n%x\n", testBlock, testBlock[0:36], testBlock[36:37], testBlock[36:36+32])
+}
+
 /*
 func TestGetMerkle(t *testing.T) {
 	test := tests[4] 				// only one we have complete data for
