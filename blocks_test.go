@@ -171,6 +171,7 @@ func TestAddMerkle(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	testBlock.PutNonce(0x12345678) // also test PutNonce
 	// a reminder that b[p:q] has length q-p, starts at b[p]
 	fmt.Printf("%x\n%x\n%x\n%x\n", testBlock, testBlock[0:36], testBlock[36:37], testBlock[36:36+32])
 }

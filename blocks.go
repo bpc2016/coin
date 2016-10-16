@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	mrposition = 36 // start of merkel root in block
+	mrposition    = 36 // start of merkle root in block
+	nonceposition = 76 // start of nonce
 )
 
 /*
@@ -165,6 +166,8 @@ func merkleBytes(txs [][]byte) ([]byte, []byte, error) {
 	return txs[0], skeleton, nil
 }
 
+//TODO - below should use []byte , noyt string for coinbase
+
 // Skel2Merkle takes Skeleton and Coinbase an computes the Merkle root (in hex)
 func Skel2Merkle(coinbase string, skeleton []byte) ([]byte, error) {
 	N := len(skeleton) / 32 // the number of partial hashes = loops
@@ -199,4 +202,9 @@ func (b Block) AddMerkle(mrhash []byte) error {
 	}
 	copy(b[mrposition:], mrhash)
 	return nil
+}
+
+// PutNonce sets the block's nonce
+func (b Block) PutNonce(num uint32) {
+	binary.LittleEndian.PutUint32(b[nonceposition:], num)
 }
