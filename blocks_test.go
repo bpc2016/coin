@@ -154,6 +154,7 @@ func TestSkeleton(t *testing.T) {
 		t.Error(err)
 	}
 	expected := fmt.Sprintf("%x", skel)
+	// test Skeleton, which only uses ext txns
 	skel2, err := Skeleton(txns)
 	if err != nil {
 		t.Error(err)
