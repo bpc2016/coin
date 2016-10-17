@@ -95,6 +95,8 @@ message Work {
   bytes coinbase = 1; // coinbase byte seq
   bytes block = 2;    // partial block header
   bytes skel = 3;     // merkle root skeleton 
+  uint32 bits = 4;    // to convert to target
+  uint32 share = 5;   // lower bar for share
 }
 
 message Win {
