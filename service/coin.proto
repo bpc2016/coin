@@ -53,6 +53,7 @@ message IssueBlockRequest {
   uint32 blockheight =3;  // the current block height
   bytes block = 4;        // blockheader
   bytes merkle = 5;       // merkle root skeleton
+  uint32 bits = 6;        // for target computation
 }
 
 // GetResult requests carries the same name as login
