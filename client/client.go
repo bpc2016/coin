@@ -1,6 +1,7 @@
 package main
 
 import (
+	"coin"
 	"flag"
 	"fmt"
 	"log"
@@ -61,6 +62,8 @@ func rolls(n int) bool {
 // search tosses two dice waiting for a double 5. exit on cancel or win
 func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	// we must combine the coinbase + rest of block here  ...
+	prepare(work)
+	// toy version
 	var theNonce uint32
 	var ok bool
 	tick := time.Tick(1 * time.Second)
@@ -84,6 +87,31 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 
 done:
 	return theNonce, ok
+}
+
+var (
+	coinbase      coin.Transaction
+	block         coin.Block
+	target, share []byte
+)
+
+func prepare(work *cpb.Work) { //{Coinbase: coinbaseBytes, Block: partblock, Skel: merkSkel}
+	//work.Coinbase
+	coinbase = coin.Transaction(work.Coinbase)
+	block = coin.Block(work.Block)
+	cbhash := coin.Sha256(coinbase)                        // TODO - confirm this is not a double hash!!
+	merkleroot, err := coin.Skel2Merkle(cbhash, work.Skel) // TODO - remove error here ...
+	if err != nil {
+		log.Fatal("failed to create merkelroot")
+	}
+	block.AddMerkle(merkleroot)
+	target = coin.Bits2Target(work.Bits)
+	/*
+		this routine should place the coinbase in the blockheader
+		compute the new merkle root hash and put in place
+		change these when called to - each cycle? every overflow?
+
+	*/
 }
 
 func main() {
