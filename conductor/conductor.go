@@ -136,9 +136,10 @@ func debugF(format string, args ...interface{}) {
 }
 
 // newBlock packages the block information that becomes 'work' for each run
-func newBlock() (upper, lower, bheader, merkle []byte, blockheight uint32) { // TODO - this data NOT fixed
+func newBlock() (upper, lower, bheader, merkle []byte, blockheight, bits uint32) { // TODO - this data NOT fixed
 	blockHeight := uint32(433789) // should come from unix time
 	blockFees := 8756123          // satoshis
+	bits = 0x19015f53             // difficulty
 	pubkey := "0225c141d69b74adac8ab984a8eb9fee42c4ce79cf6cb2be166b1ddc0356b37086"
 	// conductor generates this ...
 	upper, lower, err := coin.CoinbaseTemplates(blockHeight, blockFees, pubkey)
@@ -146,20 +147,19 @@ func newBlock() (upper, lower, bheader, merkle []byte, blockheight uint32) { // 
 		log.Fatalf("failed to generate coinbase: %v", err)
 	}
 	// call for a blockheader template
-	bheader = blockHeader()
+	bheader = blockHeader(int(bits))
 	// fetch the  skeleton mr
 	merkle = merkleRoot()
 	// sends upper, lower , blockHeight --> server
-	return upper, lower, bheader, merkle, blockHeight
+	return upper, lower, bheader, merkle, blockHeight, bits
 }
 
 // blockHeader supplies the 80 byte bh template
-func blockHeader() []byte {
+func blockHeader(bits int) []byte {
 	Version := 2
 	PrevBlock := "000000000000000117c80378b8da0e33559b5997f2ad55e2f7d18ec1975b9717"
 	TimeStamp := 0x53058b35 // tt := fmt.Sprintf("%x",uint32(time.Now().Unix()))
-	Bits := 0x19015f53
-	bh, err := coin.BlockHeader(Version, PrevBlock, TimeStamp, Bits)
+	bh, err := coin.BlockHeader(Version, PrevBlock, TimeStamp, bits)
 	if err != nil {
 		log.Fatalf("failed to generate blockheader: %v", err)
 	}
@@ -298,7 +298,7 @@ func main() {
 		serverUpChan := make(chan *cpb.Work, *numServers) // for gathering signins OMIT
 		lateEntry := make(chan struct{})                  // no more results please OMIT
 		theWinner := make(chan string, *numServers)       //  OMIT
-		u, l, b, m, h := newBlock()                       // next block
+		u, l, blk, m, h, bts := newBlock()                // next block
 		// OMIT
 		for _, c := range servers {
 			go func(c cpb.CoinClient, // HL
@@ -308,9 +308,10 @@ func main() {
 					&cpb.IssueBlockRequest{
 						Upper:       u,
 						Lower:       l,
-						Block:       b,
+						Block:       blk,
 						Merkle:      m,
-						Blockheight: h})
+						Blockheight: h,
+						Bits:        bts})
 				if skipF(c, "could not issue block", err) {
 					return
 				}
