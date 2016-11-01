@@ -1,0 +1,415 @@
+Pooled Bitcoin Mining with Go
+A Distributed Solution
+
+Busiso Chisala
+Gopher Wocheza
+busiso.chisala@gmail.com
+
+* Agenda
+
+We model the following setup:
+
+- a small cluster of *servers*
+- many Strawberry Pis as *clients* (across the globe)
+- server, client software written in Go
+
+* Bitcoin 101
+
+* Bitcoin idea
+
+- digital currency, established in 2008, 1 BTC approx £530
+- independent of any authority - no bank, no government
+- no trusted third party
+- possible to have non-reversable transactions
+- almost as 'anonymous' as cash (no collection of history for advertising, no charges, no personal details to use)
+- how? replace trust with cryptographic proof
+
+* Bitcoin basics
+
+- digital currency = cryptographically signed bitstrings
+- represents ownership of and transfer of value
+- ownership = access (key) to record in a ledger
+- original schemes (Chaum etc) used a trusted authority - bank
+- bitcoin introduced blockchain public ledger
+- bitcoin is first of peer-to-peer cryptocurrencies, use consesus based on proof of work
+- challenge is preventing double-spending
+- two ingredients: (1) ECDSA (2) SHA256 
+
+: crypto hash - apparently random 256 bit digest, collision free, hard to invert
+
+* Bitcoin Mining
+
+- bitcoin users broadcast *transactions* to the Bitcoin peer-to-peer network
+- _mining_operations_repeatedly:_
+- gather a set of transactions to form _the_  *next*block*
+- search for a uint32 'winning nonce' determined by 
+        1) their chosen block's contents, and 
+        2) the going difficulty level
+- if found, this solution is broadcast and their candidate block tops the *blockchain*
+- restart if someone else wins
+
+*Note:* each loop is _geared_ to last about ten minutes. 
+miner earns a reward in *coinbase*bitcoin* (12.5BTC)
+
+
+
+* Pooled Mining
+
+Mining is power intensive and requires a lot of computing effort 
+
+- better to join a *pool*
+- each member searches part of the nonce-space
+- share the proceeds
+
+* Distributed Pool
+
+Our mining model will pool together miners across the internet, using three categories:
+
+- client miners 
+    mine bitcoin,  get work from and send result to ..
+- servers 
+    responsible for groups of miners, get work from and  forward solution to ..
+- conductor
+    generates the block, adjudicates the 'winner' and talks to the bitcoin network
+
+*Note* conductor needs to run a _full_Bitcoin_node_, but the rest need not even have access to the outside network
+
+* Network Setup
+
+.image network.svg
+
+
+* Tools
+
+Communication will involve bytes sequences and be bidirectional
+
+- Bitcoin protocols - transactions/block manipulation (not here!)
+- gRPC  
+- Protobuf
+
+The most important function of the software is to synchronise search operations between the clients. This makes extensive use of
+
+- Go channels
+
+Note that we have endeavoured to address network latency and failure by allowing all players to die and subsequently rejoin
+
+* Proto file  /service/coin.proto
+
+Specifies *rpc* communication between clients/conductor and servers, a set of interfaces
+
+    package cpb;  // coin proto buffer
+
+    // The mining service definition.
+    service Coin {
+        rpc Login (LoginRequest) returns (LoginReply) {}
+        rpc GetWork (GetWorkRequest) returns (GetWorkReply) {}
+        rpc Announce (AnnounceRequest) returns (AnnounceReply) {}
+        rpc GetCancel (GetCancelRequest) returns (GetCancelReply) {}
+        rpc IssueBlock (IssueBlockRequest) returns (IssueBlockReply) {}
+        rpc GetResult (GetResultRequest) returns (GetResultReply) {}
+    }
+
+- `Login`, `GetWork`, `Announce`, `GetCancel` are implemented by _all_ actors
+- IssueBlock, GetResult are implemented by _conductor_ and _servers_ only
+- in effect, a conductor is an enhanced client
+
+* .. creates /services/coin.pb.go
+
+The following command  in the /service directory invokes the Go proto compiler:
+
+    protoc *.proto --go_out=plugins=grpc:.
+
+- produces the *package*cpb* Go source file `coin.pb.go` which has interfaces such as:
+
+.code ../service/coin.pb.go /^type CoinClient interface/,/LoginReply, error\)/
+
+- which we use in client/client.go
+
+.code ../client/client.go /outer OMIT/,/HL/
+
+
+* Server side implementations
+
+.code ../service/coin.pb.go /^type CoinServer interface/,/LoginReply, error\)/
+is generally more substantial:
+
+        type lockMap struct {
+            sync.Mutex
+            nextID   int
+            loggedIn map[string]int
+        }
+        var users   lockMap
+ 
+.code ../server/server.go /func.* Login/,/^}/
+
+* Server
+
+* Server flow
+
+.image server.svg
+
+: the server line has the first three events duplicated, but the cycle is demarcated
+: the bold red bars are the mining search operations
+: this server has two clients, the second being *the* conductor
+: client 1 announces a winning nonce
+: server acknowledges with a broadcast cancel which is what stops client 2
+: a separate response to getResult is sent to the *conductor* 
+: the conductor determines the absolute 'winner' among results from all servers (and forwards cancels, too)
+: conductor issues a fresh block to signal a fresh search effort
+
+
+* Server  - main()
+
+begins with ...
+
+.code ../server/server.go /func main/,/port\)/
+                        
+- main() reads flags, including *numMiners* which, if = 4 means in fact we handle 5, since we also service the *conductor*, which also feeds us data from other clients, and the external network 
+- the integer flag *index* distinguishes this from other servers, sets the port for our RPC communications 
+- the map in *users* will track our clients
+
+* Server  - main()
+
+then we  initialise several channels
+
+.code ../server/server.go /signIn =/,/resultchan =/
+        
+Note:  _run.ch_ is a field of the *run* var which has type *lockChan*
+
+.code ../server/server.go /type lockChan/,/^}/
+
+We later fire up the server with
+
+        s := new(server)
+        g := grpc.NewServer()
+        cpb.RegisterCoinServer(g, s)
+        g.Serve(lis)
+
+* Server - main() 
+     
+The main loop starts with waiting for a new block from the *Conductor*
+
+.code ../server/server.go /go func\(\) \{/,/}\(\)/
+
+- if a new block is not forthcoming, it repeatedly checks for the Conductor after *allowedConductorTime* seconds
+
+: waitFor takes a channel (signIn/signOut) and a direction in/out
+
+* Server - main() 
+
+- the *WaitFor()* call ( _explained_below_ ) is a fancier form of the following:
+        for i := 0; i < *numMiners; i++ { 
+            <-signIn  // block until ALL are signed in
+        }    
+- *run.winnerFound*=*false* resets the test for first sight of a winning solution 
+- *stop.Add(1)* refreshes a sync.Waitgroup in the *getCancel* goroutine
+- *close(run.ch)* removes a block to synchronise the start of search by all miners
+
+: note that signIn is a channel with capacity = number of clients
+
+* Server - WaitFor()
+
+This is called in two places: *main()* and *Announce()*. The first part:
+
+.code ../server/server.go /func.* WaitFor/,/^done/
+
+- *sign* is either channel *signIn* or *signOut*, respectively
+- any client after the first is given *allowedTime* seconds before being declared dead (_alive[c]=false_, the default)
+- if the channel is incoming, housekeep for 'dead' clients
+
+: waitFor() blocks for the first signIn, the rest are given time before being declared dead
+: if we have lost miners, delete their *users.loggedIn* entries, so they can rejoin later 
+: take care in case it is the conductor that has died
+
+* Server - GetWork()
+
+On each work cycle, every client (except the conductor) issues a request to this goroutine
+
+.code ../server/server.go /func.* GetWork/,/^}/
+
+- registration allows *main()* to ensure that all clients have reached this point
+- each *GetWork* blocks until *close(run.ch)* is called
+- the server is responsible for customising the _coinbase_ of blocks it issues 
+- all clients apart from the conductor start searches with the return of GetWork()
+
+* Server - GetCancel()
+
+At the same time that *main()* starts a run, it also refreshes the *stop* waitgroup used by GatCancel
+
+.code ../server/server.go /func.* GetCancel/,/^}/
+
+- each client runs a getcancel request goroutine which allows notification of when to terminate searching
+- the Conductor also 'searches' - on behalf of external miners
+- the cancel directive - _stop.Done()_ - comes from *Announce()*
+
+:  stop.Done())  checks *signOut* registration first
+:  the server index in the reply is used by the Conductor - identify source server
+
+
+* Server - Announce()
+
+The Annouce goroutine is triggered by a client declaring success
+
+.code ../server/server.go /func.* Announce/,/^}/
+
+- a request coming after *winnerFound=true* is rejected with Ok=false
+- the win is sent to the *resultChan* channel, to alert the conductor
+- the *stop.Done()* frees the getCancel replies to all clients
+
+: observe that the stop.Done() is after waitFor() in order to synchronise
+
+* Server - IssueBlock()
+
+Conductor-specific communications 
+
+.code ../server/server.go /func.* IssueBlock/,/^}/
+
+- when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *block.data*=*<-blockchan* and restarts that cycle
+
+: this is the server implementation of this interface
+: note some of the data passed to server by conductor (transactions/blocks)
+
+* Server - GetResult()
+
+The more critical Conductor-specific communication 
+
+.code ../server/server.go /func.* GetResult/,/^}/
+
+- uses the *resultChan* channel
+
+- corresponding code in the Conductor:
+
+.code ../conductor/conductor.go /func getResult/,/^}/
+
+
+* Server - GetResult() on the Conductor
+
+where *declareWin* does the following:
+
+- handles messages from servers as well as 'internal' ones generated by 'wins' in the 'external' search
+
+- returns the winning solution via a channel to the terminal
+
+- redirects subsequent win claims from other servers
+
+- distributes information about a win to the servers (including 'external' wins)
+
+: confirms a win by sending a bogus win to the 'other' servers
+: uses index = numServers to send this win in case of an external win, this time to *all* servers
+
+* Client
+
+* Client - Intro
+
+These are the actual miners with primary function searching for the 'winning' block/nonce combination: hashing. Each client
+
+- has a unique user identity, here set by flag *user* or *-u*
+- connects to a single server, here configured by flag *-s*
+- will run unattended and continuously, even if the server is down for less than a configured period   
+- receives customised block header and where to search from server 
+- searches partial nonce-space until a solution or cancellation call
+
+
+: server divides nonce-space depending on number of clients
+: in fact the only way to shut a client down aside from *ctrl-C* is to shut down its server for longer than this time
+: in this toy example, has a parameter *-t* that determines how 'hard' it's search is. The default value is 2
+
+* Client - main()
+
+This is made of two cycles, the outer one, where login occurs :
+
+.code ../client/client.go /outer OMIT/,/main cycle OMIT/
+
+inner cycle goes in here ...
+
+.code ../client/client.go /main end OMIT/,/outerend OMIT/
+
+: the *skipF* call checks whether there was an error and, if so, returns true. It also sets variable *serverAlive* to false 
+: this is repeated until *maxSleep* x 5 seconds have passed, after which the client exits
+: this allows for the server to be brought down while its clients wait - if it revives in the period, all connections resume 
+
+* Client - main() inner cycle
+
+- client invokes a *GetWork* request
+- the response is a signal to start the *search*, which, together with *getCancel* are called with channels *stopLooking* and *endLoop*
+- both channels are buffered, with capacity 1 and filled when getCancel  returns, at which point search is aborted then the main loop ended
+- alternatively, *search* returns with a solution - before stopLooking fills
+- in this case *announceWin* calls the *Announce* request to the server. This time, the main() loop waits for a subsequent cancellation from the server - via endLoop
+
+: code on next slide ...
+
+* Client - main () inner cycle code
+
+.code ../client/client.go /main cycle OMIT/,/main end OMIT/
+
+* Conductor
+
+* Conductor - Intro
+
+We have only one Conductor that connects to a set of servers, as well as the outside world.
+
+- it runs sofware similar to the clients, except that it connects to more than one server and implements a few more interfaces
+- to each server, the Conductor presents itself with username *EXTERNAL*
+- the servers send their winners (if any) to the Conductor 
+- the Conductor takes the first caller as actual winner, and tells the other servers to stop searching
+- the 'search' the Conductor runs models declaring a winner in the external network, so is implemented here as a simple timeout 
+- if a Conductor disconnects from a server, that server pauses all its clients and waits for the Conductor to become available
+- the only command-line flag is the addresses of its servers (here modelled by the number: *-s*)
+
+* Conductor - code
+
+Initialisation dials it's servers, ignoring those it cannot reach: 
+
+.code ../conductor/conductor.go /func main/,/for \{/
+
+main loop ...
+
+.code ../conductor/conductor.go /a OMIT/,/^}/
+
+: 'real' conductor would infer numServers from list of IP addresses
+: conductor does not login like other clients, registered when it issues server with new block
+
+* Conductor - main() loop, code
+
+.code ../conductor/conductor.go /for \{/,/b OMIT/
+
+: generates new block,  initialising various channels, block -> each server in separate Goroutine. 
+: servers not receiving it are ignored
+: successful sends are followed by a *getResult* call
+: *getWork* call used to reconnect to servers that may have gone down. 
+: server acks sent to *serverUpChan* channel
+: as with other clients, makes a *getCancel* call - one per server
+
+* Conductor - main() loop
+
+- after generating the new block and initialising various channels, each server is sent this block in a separate Go routine. Those not receiving it are ignored
+- successful sends are followed by a *getResult* call
+- unlike regular clients, the Conductor does not login with the *Login* interface, nor does it need to get work from the server.
+- instead, the *getWork* call is used to reconnect to servers that may have gone down. Their status is registered by *alive[]*, and the server acks are sent to the *serverUpChan* channel
+- as with other clients, the Conductor also makes a *getCancel* call - one per server
+
+* Conductor - main() loop, continued
+
+Meanwhile, the Conductor's own search blocks until it has heard from all live servers ... the loop ends likewise - on word from _all_
+.code ../conductor/conductor.go /b OMIT/,/c OMIT/
+
+* References
+
+*these*slides,*online:*
+[[http://go-talks.appspot.com/github.com/bpc2016/coin/talks/bitcoin.slide][http://go-talks.appspot.com/github.com/bpc2016/coin/talks/bitcoin.slide]] 
+
+*gRPC*Go* Gotham Go 2015 *Sameer*Ajmani*, Google:
+[[https://www.youtube.com/watch?v=vTIyz2QfExc&index=7&list=PLeGxIOPLk9ELh9tsPZMzau6CzMjfMzp9][Watch the talk on YouTube]]
+
+*online/offline*javascript*wallet,*bitcoin*learning*tool*:
+[[https://coinb.in][https://coinb.in]]
+
+*Bitcoin*Mining*the*hard*way* -  Ken Shirriff
+[[http://www.righto.com/2014/02/bitcoin-mining-hard-way-algorithms.html][http://www.righto.com/2014/02/bitcoin-mining-hard-way-algorithms.html]]
+
+
+*Protocol*Buffers*
+[[https://developers.google.com/protocol-buffers/][https://developers.google.com/protocol-buffers/]]
+
+*gRPC*Documentation*
+[[http://www.grpc.io/docs/][http://www.grpc.io/docs/]]

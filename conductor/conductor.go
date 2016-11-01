@@ -282,9 +282,10 @@ func main() {
 	alive = make(map[cpb.CoinClient]bool)
 	for index := 0; index < *numServers; index++ {
 		addr := fmt.Sprintf("localhost:%d", 50051+index)
-		conn, err := grpc.Dial(addr, grpc.WithInsecure())
+		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
 		if err != nil {
 			log.Fatalf("fail to dial: %v", err)
+			continue
 		}
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
@@ -304,29 +305,29 @@ func main() {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
-				_, err := c.IssueBlock(context.Background(),
-					&cpb.IssueBlockRequest{
-						Upper:       u,
-						Lower:       l,
-						Block:       blk,
-						Merkle:      m,
-						Blockheight: h,
+				_, err := c.IssueBlock(context.Background(), // HL
+					&cpb.IssueBlockRequest{ // HL
+						Upper:       u,   // OMIT
+						Lower:       l,   // OMIT
+						Block:       blk, // OMIT
+						Merkle:      m,   // OMIT
+						Blockheight: h,   // OMIT
 						Bits:        bts})
 				if skipF(c, "could not issue block", err) {
 					return
-				}
-				// conductor handles results
+				} // conductor handles results
 				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
-				r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
-				if skipF(c, "could not reconnect", err) {                                        // HL
+				r, err := c.GetWork(context.Background(), // HL
+					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
+				if skipF(c, "could not reconnect", err) { // HL
 					return
 				} else if !alive[c] { // HL
 					alive[c] = true
 				}
 				//  OMIT
 				serverUpChan <- r.Work // HL
-				// in parallel - seek cancellation
+				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}

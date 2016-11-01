@@ -77,9 +77,9 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 
 // GetWork implements cpb.CoinServer, synchronises start of miners, hands out work
 func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetWorkReply, error) {
-	debugF("Work request: %+v\n", in)
-	signIn <- in.Name // HL
-	<-run.ch          // HL
+	debugF("Work request: %+v\n", in) // OMIT
+	signIn <- in.Name                 // HL
+	<-run.ch                          // HL
 	// customise work for this miner
 	work := setWork(in.Name)
 	return &cpb.GetWorkReply{Work: work}, nil
@@ -102,7 +102,7 @@ func setWork(name string) *cpb.Work {
 	coinbaseBytes, err := coin.GenCoinbase(upper, lower, blockHeight, miner, minername)
 	fatalF("failed to set block data", err)
 	block.Unlock()
-	fmt.Printf("miner: %s\ncoinbase:\n%x\n", minername, coinbaseBytes)
+	// fmt.Printf("miner: %s\ncoinbase:\n%x\n", minername, coinbaseBytes)
 	return &cpb.Work{Coinbase: coinbaseBytes, Block: partblock, Skel: merkSkel, Bits: bits}
 }
 
@@ -110,13 +110,13 @@ func setWork(name string) *cpb.Work {
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
 	run.Lock()
 	defer run.Unlock()
-	if run.winnerFound {
+	if run.winnerFound { // reject all but the first
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a  winner
-	run.winnerFound = true  // HL
-	resultchan <- *soln.Win // HL
-	fmt.Println("starting signout numminers = ", *numMiners)
+	run.winnerFound = true                                   // HL
+	resultchan <- *soln.Win                                  // HL
+	fmt.Println("starting signout numminers = ", *numMiners) // OMIT
 	WaitFor(signOut, "out")
 	run.ch = make(chan struct{}) // HL
 	stop.Done()                  // HL
@@ -143,8 +143,9 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 
 // GetResult sends back win to Conductor : implements cpb.CoinServer
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
-	result := <-resultchan                             // wait for a result
-	fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
+	result := <-resultchan // wait for a result
+	//fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
+	fmt.Printf("sendresult: %d\n", *index) // OMIT
 	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
