@@ -27,7 +27,7 @@ We model the following setup:
 * Bitcoin basics
 
 - digital currency = cryptographically signed bitstrings
-- represents ownership of and transfer of value
+- coin = ownership of and transfer of value
 - ownership = access (key) to record in a ledger
 - original schemes (Chaum etc) used a trusted authority - bank
 - bitcoin introduced blockchain public ledger
@@ -35,18 +35,19 @@ We model the following setup:
 - challenge is preventing double-spending
 - two ingredients: (1) ECDSA (2) SHA256 
 
+: ledger based as opposed to token based, so like credit/debit cards, paypal etc
 : crypto hash - apparently random 256 bit digest, collision free, hard to invert
 
 * Bitcoin Mining
 
 - bitcoin users broadcast *transactions* to the Bitcoin peer-to-peer network
 - _mining_operations_repeatedly:_
-- gather a set of transactions to form _the_  *next*block*
-- search for a uint32 'winning nonce' determined by 
-        1) their chosen block's contents, and 
-        2) the going difficulty level
-- if found, this solution is broadcast and their candidate block tops the *blockchain*
-- restart if someone else wins
+- 1. gather a set of transactions to form _the_  *next*block*
+- 2. search for a uint32 'winning nonce' determined by 
+        a) their chosen block's contents, and 
+        b) the going difficulty level
+- 3. if found, this solution is broadcast and their candidate block tops the *blockchain*
+- 4. stop looking, if someone else wins
 
 *Note:* each loop is _geared_ to last about ten minutes. 
 miner earns a reward in *coinbase*bitcoin* (12.5BTC)
@@ -55,7 +56,7 @@ miner earns a reward in *coinbase*bitcoin* (12.5BTC)
 
 * Pooled Mining
 
-Mining is power intensive and requires a lot of computing effort 
+Mining is power intensive and requires a lot of computing effort - now compete against ASIC h/ware 
 
 - better to join a *pool*
 - each member searches part of the nonce-space
@@ -87,7 +88,7 @@ Communication will involve bytes sequences and be bidirectional
 - gRPC  
 - Protobuf
 
-The most important function of the software is to synchronise search operations between the clients. This makes extensive use of
+The most important function of the software is to *synchronise* search operations between the clients. This makes extensive use of
 
 - Go channels
 
@@ -130,8 +131,7 @@ The following command  in the /service directory invokes the Go proto compiler:
 
 * Server side implementations
 
-.code ../service/coin.pb.go /^type CoinServer interface/,/LoginReply, error\)/
-is generally more substantial:
+are generally more substantial ... set up struct *users*
 
         type lockMap struct {
             sync.Mutex
@@ -139,7 +139,9 @@ is generally more substantial:
             loggedIn map[string]int
         }
         var users   lockMap
- 
+
+to use in _Login_ Goroutine:
+
 .code ../server/server.go /func.* Login/,/^}/
 
 * Server
@@ -229,9 +231,10 @@ On each work cycle, every client (except the conductor) issues a request to this
 
 - registration allows *main()* to ensure that all clients have reached this point
 - each *GetWork* blocks until *close(run.ch)* is called
-- the server is responsible for customising the _coinbase_ of blocks it issues 
+- the server is responsible for customising the _coinbase_transaction_ of blocks it issues 
 - all clients apart from the conductor start searches with the return of GetWork()
 
+: remark about the coinbase - unique to each miner, basis of share, extra randomness
 * Server - GetCancel()
 
 At the same time that *main()* starts a run, it also refreshes the *stop* waitgroup used by GatCancel
@@ -267,6 +270,7 @@ Conductor-specific communications
 - when the Conductor sends a new block to *IssueBlock*, the loop in *main()* accepts this via *block.data*=*<-blockchan* and restarts that cycle
 
 : this is the server implementation of this interface
+: explain that IssueBlock gets data from conductor, transfers to main() loop for restart
 : note some of the data passed to server by conductor (transactions/blocks)
 
 * Server - GetResult()
@@ -306,8 +310,8 @@ These are the actual miners with primary function searching for the 'winning' bl
 - has a unique user identity, here set by flag *user* or *-u*
 - connects to a single server, here configured by flag *-s*
 - will run unattended and continuously, even if the server is down for less than a configured period   
-- receives customised block header and where to search from server 
-- searches partial nonce-space until a solution or cancellation call
+- receives (from server) customised block header and told _where_ to search  
+- searches its nonce-space until a solution found or gets cancellation
 
 
 : server divides nonce-space depending on number of clients
@@ -316,7 +320,7 @@ These are the actual miners with primary function searching for the 'winning' bl
 
 * Client - main()
 
-This is made of two cycles, the outer one, where login occurs :
+Two cycles, the outer one, where login occurs :
 
 .code ../client/client.go /outer OMIT/,/main cycle OMIT/
 
@@ -346,23 +350,23 @@ inner cycle goes in here ...
 
 * Conductor - Intro
 
-We have only one Conductor that connects to a set of servers, as well as the outside world.
+Only one Conductor, connects to a set of servers, as well as the outside world.
 
-- it runs sofware similar to the clients, except that it connects to more than one server and implements a few more interfaces
+- runs sofware similar to clients, except that it connects to multiple servers and implements a few more interfaces
 - to each server, the Conductor presents itself with username *EXTERNAL*
-- the servers send their winners (if any) to the Conductor 
-- the Conductor takes the first caller as actual winner, and tells the other servers to stop searching
-- the 'search' the Conductor runs models declaring a winner in the external network, so is implemented here as a simple timeout 
-- if a Conductor disconnects from a server, that server pauses all its clients and waits for the Conductor to become available
-- the only command-line flag is the addresses of its servers (here modelled by the number: *-s*)
+- servers send their winners (if any) to the Conductor 
+- then conductor takes first caller as actual winner, and tells other servers to stop searching
+- 'search' that (toy) Conductor runs models declaring a winner in the external network, so is implemented here as a simple timeout 
+- if Conductor disconnects from a server, that server pauses all its clients and waits for the Conductor to become available
+- only command-line flag is the addresses of its servers (here modelled by the number: *-s*)
 
 * Conductor - code
 
-Initialisation dials it's servers, ignoring those it cannot reach: 
+Initialisation: dials servers, ignoring those it cannot reach: 
 
 .code ../conductor/conductor.go /func main/,/for \{/
 
-main loop ...
+main loop:
 
 .code ../conductor/conductor.go /a OMIT/,/^}/
 
@@ -397,6 +401,9 @@ Meanwhile, the Conductor's own search blocks until it has heard from all live se
 
 *these*slides,*online:*
 [[http://go-talks.appspot.com/github.com/bpc2016/coin/talks/bitcoin.slide][http://go-talks.appspot.com/github.com/bpc2016/coin/talks/bitcoin.slide]] 
+
+Bitcoin: A Peer-to-Peer Electronic Cash System *S*Nakamoto*
+[[https://bitcoin.org/bitcoin.pdf][https://bitcoin.org/bitcoin.pdf]]
 
 *gRPC*Go* Gotham Go 2015 *Sameer*Ajmani*, Google:
 [[https://www.youtube.com/watch?v=vTIyz2QfExc&index=7&list=PLeGxIOPLk9ELh9tsPZMzau6CzMjfMzp9][Watch the talk on YouTube]]
