@@ -167,16 +167,19 @@ func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool) // HL
 	count := 1
 	alive[<-sign] = true // we need at least one! ... then the rest ...
+	stopWaiting := false
 	for i := 1; i < *numMiners; i++ {
 		select {
-		case <-time.After(allowedTime * time.Second): // exit, time is up
-			goto done
+		case <-time.After(allowedTime * time.Second):
+			stopWaiting = true //  exit, time is up
 		case c := <-sign:
 			alive[c] = true
 			count++
 		}
+		if stopWaiting { // the remaining miners are taking too long, abandon them
+			break
+		}
 	}
-done:
 	if direction == "in" && count < *numMiners {
 		for name := range users.loggedIn {
 			if !alive[name] && name != "EXTERNAL" {
@@ -215,15 +218,18 @@ func main() {
 
 	go func() {
 		for {
+			haveBlock := false
 			for {
 				select {
 				case block.data = <-blockchan: // HL
-					goto start
+					haveBlock = true //break out of this loop
 				case <-time.After(allowedConductorTime * time.Second): // HL
 					fmt.Println("Need a live conductor!")
 				}
+				if haveBlock {
+					break
+				}
 			}
-		start:
 			WaitFor(signIn, "in") // HL
 			fmt.Printf("\n--------------------\nNew race!\n")
 			run.winnerFound = false // HL

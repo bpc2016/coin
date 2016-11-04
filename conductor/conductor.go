@@ -33,15 +33,13 @@ func search(stopLooking chan struct{}) (uint32, bool) {
 		// check for a stop order
 		select {
 		case <-stopLooking:
-			goto done
+			return theNonce, ok
 		default: // continue
 		}
 		// wait for a second here ...
 		<-tick
 		debugF(" | EXT %d\n", cn)
 	}
-
-done:
 	return theNonce, ok
 }
 
@@ -62,7 +60,6 @@ func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop
 	if skipF(c, "could not request cancellation", err) {
 		return
 	}
-
 	stopLooking <- struct{}{} // stop search
 	endLoop <- struct{}{}     // quit loop
 }
@@ -111,7 +108,6 @@ func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) boo
 	if skipF(c, "could not announce win", err) {
 		return false
 	}
-
 	return r.Ok
 }
 
@@ -331,7 +327,7 @@ func main() {
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
-		//  collect the work request acks from servers b OMIT
+		//  collect the work request acks from servers OMIT
 		for c := range alive {
 			if !alive[c] {
 				continue

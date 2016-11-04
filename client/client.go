@@ -76,16 +76,14 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 		}
 		// check for a stop order
 		select {
-		case <-stopLooking:
-			goto done // if so ... break out of this cycle, return (with ok=false!)
+		case <-stopLooking: // if so ... break out of this cycle, ok=false
+			return theNonce, false
 		default: // continue
 		}
 		// wait for a second here ...
 		<-tick
 		debugF("| %d %d\n", myID, cn)
 	}
-
-done:
 	return theNonce, ok
 }
 
@@ -156,7 +154,7 @@ func main() {
 			fmt.Printf("Fetching work %s ..\n", name)
 			r, err := c.GetWork(context.Background(), &cpb.GetWorkRequest{Name: name})
 			if skipF("could not get work", err) {
-				goto outercycle
+				break
 			}
 			work = r.Work                        // HL
 			stopLooking = make(chan struct{}, 1) // HL
@@ -176,7 +174,6 @@ func main() {
 			fmt.Printf("-----------------------\n")
 		}
 		// main end OMIT
-	outercycle:
 	}
 } // outerend OMIT
 
