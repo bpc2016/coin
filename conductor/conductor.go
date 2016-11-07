@@ -327,7 +327,7 @@ func main() {
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
-		//  collect the work request acks from servers OMIT
+		//  collect the work request acks from servers b OMIT
 		for c := range alive {
 			if !alive[c] {
 				continue
@@ -335,7 +335,7 @@ func main() {
 			debugF("%+v\n", <-serverUpChan)
 		}
 		// OMIT
-		debugF("%s\n", "...") //  OMIT
+		debugF("%s\n", "...") // OMIT
 		// 'search' - as the common 'External' miner
 		theNonce, ok := search(stopLooking)
 		if ok {

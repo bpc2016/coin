@@ -213,7 +213,7 @@ The main loop starts with waiting for a new block from the *Conductor*
 
 This is called in two places: *main()* and *Announce()*. The first part:
 
-.code ../server/server.go /func.* WaitFor/,/^done/
+.code ../server/server.go /func.* WaitFor/,/done/
 
 - *sign* is either channel *signIn* or *signOut*, respectively
 - any client after the first is given *allowedTime* seconds before being declared dead (_alive[c]=false_, the default)

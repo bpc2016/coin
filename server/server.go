@@ -180,6 +180,7 @@ func WaitFor(sign chan string, direction string) {
 			break
 		}
 	}
+	// done OMIT
 	if direction == "in" && count < *numMiners {
 		for name := range users.loggedIn {
 			if !alive[name] && name != "EXTERNAL" {
