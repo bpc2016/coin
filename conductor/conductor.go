@@ -114,9 +114,12 @@ func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) boo
 var alive map[cpb.CoinClient]bool
 
 // utilities
+
+// skipF is a per connection function. logs message and returns true if err
+// otherwise returns false. it also maintains the alive[] map
 func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
-		log.Printf(message+": %v", err)
+		log.Printf("SF: "+message+": %v", err)
 		if alive[c] {
 			alive[c] = false
 		}
@@ -301,17 +304,26 @@ func main() {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
-				_, err := c.IssueBlock(context.Background(), // HL
-					&cpb.IssueBlockRequest{ // HL
-						Upper:       u,   // OMIT
-						Lower:       l,   // OMIT
-						Block:       blk, // OMIT
-						Merkle:      m,   // OMIT
-						Blockheight: h,   // OMIT
-						Bits:        bts})
-				if skipF(c, "could not issue block", err) {
-					return
-				} // conductor handles results
+				retry := true
+				for retry {
+					_, err := c.IssueBlock(context.Background(), // HL
+						&cpb.IssueBlockRequest{ // HL
+							Upper:       u,   // OMIT
+							Lower:       l,   // OMIT
+							Block:       blk, // OMIT
+							Merkle:      m,   // OMIT
+							Blockheight: h,   // OMIT
+							Bits:        bts})
+					if skipF(c, "could not issue block", err) {
+						// skip only if > 1 servers, else wait
+						if *numServers > 1 {
+							return
+						}
+					} else {
+						retry = false // exit this for loop
+					}
+				}
+				// conductor handles results
 				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
