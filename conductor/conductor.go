@@ -315,15 +315,14 @@ func main() {
 							Blockheight: h,   // OMIT
 							Bits:        bts})
 					if skipF(c, "could not issue block", err) {
-						// skip only if > 1 servers, else wait
 						if *numServers > 1 {
-							return
+							return // skip only if > 1 servers, else wait
 						}
 					} else {
 						retry = false // exit this for loop
 					}
 				}
-				// conductor handles results
+				// conductor handles results OMIT
 				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
