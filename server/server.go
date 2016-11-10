@@ -67,6 +67,11 @@ var (
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
 	defer users.Unlock()
+	nxtplus := users.nextID + 2
+	// fmt.Println("NEXTID:", users.nextID, " MINERS:", *numMiners)  // OMIT
+	if nxtplus == *numMiners {
+		return nil, errors.New("Capacity reached!")
+	}
 	if _, ok := users.loggedIn[in.Name]; ok {
 		return nil, errors.New("You are already logged in!")
 	}
@@ -186,6 +191,7 @@ func WaitFor(sign chan string, direction string) {
 			if !alive[name] && name != "EXTERNAL" {
 				fmt.Printf("DEAD: %s\n", name)
 				delete(users.loggedIn, name)
+				users.nextID--
 			}
 		}
 	}
