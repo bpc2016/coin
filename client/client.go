@@ -17,7 +17,7 @@ import (
 var (
 	debug       = flag.Bool("d", false, "debug mode")
 	tosses      = flag.Int("t", 2, "number of tosses")
-	user        = flag.String("u", "sole", "the client name")
+	user        = flag.String("u", "", "the client name")
 	server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
 	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
 	myID        uint32
@@ -116,6 +116,9 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 	flag.Parse()
 
+	if *user == "" {
+		log.Fatalf("%s\n", "Client must have identity. Use -u switch")
+	}
 	address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
