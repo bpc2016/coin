@@ -28,8 +28,8 @@ var (
 
 type lockMap struct {
 	sync.Mutex
-	nextID   int
-	loggedIn map[string]int
+	countIN  int
+	loggedIn map[string]bool
 }
 
 type blockdata struct {
@@ -67,17 +67,17 @@ var (
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
 	defer users.Unlock()
-	nxtplus := users.nextID + 2
-	// fmt.Println("NEXTID:", users.nextID, " MINERS:", *numMiners)  // OMIT
+	nxtplus := users.countIN + 2
+	// fmt.Println("countIN:", users.countIN, " MINERS:", *numMiners)  // OMIT
 	if nxtplus == *numMiners {
 		return nil, errors.New("Capacity reached!")
 	}
 	if _, ok := users.loggedIn[in.Name]; ok {
 		return nil, errors.New("You are already logged in!")
 	}
-	users.nextID++
-	users.loggedIn[in.Name] = users.nextID // HL
-	return &cpb.LoginReply{Id: uint32(users.nextID)}, nil
+	users.countIN++
+	users.loggedIn[in.Name] = true  HL
+	return &cpb.LoginReply{Id: 0}, nil // FIXME - we do not need to return any value, not used
 }
 
 // GetWork implements cpb.CoinServer, synchronises start of miners, hands out work
@@ -90,13 +90,18 @@ func (s *server) GetWork(ctx context.Context, in *cpb.GetWorkRequest) (*cpb.GetW
 	return &cpb.GetWorkReply{Work: work}, nil
 }
 
+// this is needed because we no longer issue miner IDs - needed by steWork below
+func minerID(name string) int {
+	return 1 // FIXME - this should be a unqiue ID assigned to miner for purposes of mining
+}
+
 func setWork(name string) *cpb.Work {
 	if name == "EXTERNAL" {
 		return &cpb.Work{Coinbase: []byte{}, Block: []byte{}, Skel: []byte{}}
 	}
 	block.Lock()
 	minername := fmt.Sprintf("%d:%s", *index, name)
-	miner := users.loggedIn[name]
+	miner := minerID(name) // we return an ID attahed to this miner by name
 	upper := block.data.u
 	lower := block.data.l
 	blockHeight := block.data.height
@@ -142,7 +147,7 @@ type server struct{}
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
-	users.loggedIn["EXTERNAL"] = 1 // we login conductor here
+	users.loggedIn["EXTERNAL"] = true //1 // we login conductor here
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -191,7 +196,7 @@ func WaitFor(sign chan string, direction string) {
 			if !alive[name] && name != "EXTERNAL" {
 				fmt.Printf("DEAD: %s\n", name)
 				delete(users.loggedIn, name)
-				users.nextID--
+				users.countIN--
 			}
 		}
 	}
@@ -208,9 +213,9 @@ func WaitFor(sign chan string, direction string) {
 // }
 
 func main() {
-	flag.Parse() // HL
-	users.loggedIn = make(map[string]int)
-	users.nextID = -1
+	flag.Parse()                           // HL
+	users.loggedIn = make(map[string]bool) // was int
+	users.countIN = -1
 	*numMiners++ // to include the Conductor (EXTERNAL)
 
 	port := fmt.Sprintf(":%d", 50051+*index) // HL
