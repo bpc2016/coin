@@ -21,8 +21,8 @@ const (
 )
 
 var (
-	index     = flag.Int("index", 0, "RPC port is 50051+index") //; debug port is 36661+index")
-	numMiners = flag.Int("miners", 3, "number of miners")       // DOESNT include the external one
+	index     = flag.Int("index", -1, "RPC port is 50051+index") // must be at least 0
+	numMiners = flag.Int("miners", 3, "number of miners")        // DOESNT include the external one
 	debug     = flag.Bool("d", false, "debug mode")
 )
 
@@ -76,7 +76,7 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 		return nil, errors.New("You are already logged in!")
 	}
 	users.countIN++
-	users.loggedIn[in.Name] = true  HL
+	users.loggedIn[in.Name] = true     // HL
 	return &cpb.LoginReply{Id: 0}, nil // FIXME - we do not need to return any value, not used
 }
 
@@ -213,11 +213,14 @@ func WaitFor(sign chan string, direction string) {
 // }
 
 func main() {
-	flag.Parse()                           // HL
-	users.loggedIn = make(map[string]bool) // was int
-	users.countIN = -1
-	*numMiners++ // to include the Conductor (EXTERNAL)
+	flag.Parse() // HL
 
+	users.loggedIn = make(map[string]bool)
+	users.countIN = -1
+	*numMiners++      // to include the Conductor (EXTERNAL)
+	if *index == -1 { // mandatory
+		log.Fatalf("%s", "Server port missing! use -index i, i=0,1, ...")
+	}
 	port := fmt.Sprintf(":%d", 50051+*index) // HL
 	lis, err := net.Listen("tcp", port)
 	fatalF("failed to listen", err)
