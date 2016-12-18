@@ -20,7 +20,7 @@ var (
 	user        = flag.String("u", "", "the client name")
 	server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
 	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
-	myID        uint32
+	//myID        uint32
 	serverAlive bool
 )
 
@@ -70,7 +70,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	for cn := 0; ; cn++ {
 		if rolls(*tosses) { // a win?
 			theNonce = uint32(cn)
-			debugF("winning! %d nonce: %d\n", myID, cn)
+			debugF("winning! nonce: %d\n", cn)
 			ok = true
 			break
 		}
@@ -82,7 +82,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 		}
 		// wait for a second here ...
 		<-tick
-		debugF("| %d %d\n", myID, cn)
+		debugF("| %d\n", cn)
 	}
 	return theNonce, ok
 }
@@ -145,7 +145,7 @@ func main() {
 			serverAlive = true // we are back
 		}
 		log.Printf("Login successful. Assigned id: %d\n", r.Id)
-		myID = r.Id
+		//myID = r.Id
 		// main cycle OMIT
 		for {
 			var ( // OMIT
@@ -167,10 +167,10 @@ func main() {
 			// search blocks
 			theNonce, ok = search(work, stopLooking) // HL
 			if ok {                                  // we completed search
-				fmt.Printf("%d ... sending solution (%d) \n", myID, theNonce)
+				fmt.Printf("%s ... sending solution (%d) \n", name, theNonce)
 				win := annouceWin(c, theNonce, work.Block, name) // HL
 				if win {                                         // late?
-					fmt.Printf("== %d == FOUND -> %d\n", myID, theNonce)
+					fmt.Printf("== %s == FOUND -> %d\n", name, theNonce)
 				}
 			}
 			<-endLoop // wait here for cancel from server
