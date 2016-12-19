@@ -15,11 +15,13 @@ import (
 )
 
 var (
-	debug       = flag.Bool("d", false, "debug mode")
-	tosses      = flag.Int("t", 2, "number of tosses")
-	user        = flag.String("u", "", "the client name")
-	server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
-	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
+	debug  = flag.Bool("d", false, "debug mode")
+	tosses = flag.Int("t", 2, "number of tosses")
+	user   = flag.String("u", "", "the client name")
+	// server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
+	serverHost = flag.String("s", "localhost", "server hostname, eg goblimey.com")
+	serverPort = flag.Int("p", 0, "server port offset from 50051.")
+	maxSleep   = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
 	//myID        uint32
 	serverAlive bool
 )
@@ -112,14 +114,22 @@ func prepare(work *cpb.Work) { //{Coinbase: coinbaseBytes, Block: partblock, Ske
 	*/
 }
 
-func main() {
-	rand.Seed(time.Now().UTC().UnixNano())
-	flag.Parse()
-
+func checkMandatoryF() {
 	if *user == "" {
 		log.Fatalf("%s\n", "Client must have identity. Use -u switch")
 	}
-	address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
+}
+
+func main() {
+	rand.Seed(time.Now().UTC().UnixNano())
+	flag.Parse()
+	checkMandatoryF()
+	// address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
+	address := fmt.Sprintf("%s:%d", *serverHost, 50051+*serverPort) //"localhost:50051"
+	// if *debug {
+	//     log.Printf("connecting to server %s", address)
+	// }
+	debugF("connecting to server %s", address)
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
