@@ -2,7 +2,6 @@ package main
 
 import (
 	"coin"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -116,24 +115,15 @@ func prepare(work *cpb.Work) { //{Coinbase: coinbaseBytes, Block: partblock, Ske
 	*/
 }
 
+// genName takes userid and key to generate
+// a login and time
 func genName(user string, key string) (string, string, error) {
-	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
-	if err != nil {
-		return "", "", err
-	}
-	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
-	if err != nil {
-		return "", "", err
-	}
 	time := fmt.Sprintf("%x", uint32(time.Now().Unix()))
-	timehex, err := hex.DecodeString(time)
+	login, err := coin.GenLogin(user, key, time)
 	if err != nil {
-		return "", "", err
+		log.Fatalf("error: %v", err)
 	}
-	concat1 := append(userhex, keyhex...)
-	concat2 := append(timehex, concat1...)
-	hash := coin.Sha256(concat2)
-	return fmt.Sprintf("%x", hash[0:6]), time, nil //
+	return login, time, nil //
 }
 
 func main() {

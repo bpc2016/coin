@@ -9,7 +9,9 @@ package coin
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"log"
 )
 
@@ -94,4 +96,26 @@ func Reverse(s []byte) []byte {
 		t[L-1-i] = v
 	}
 	return t
+}
+
+// GenLogin generates the login for use by client given user, key and time
+func GenLogin(user string, key string, time string) (string, error) {
+	login := ""
+	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
+	if err != nil {
+		return login, err
+	}
+	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
+	if err != nil {
+		return login, err
+	}
+	timehex, err := hex.DecodeString(time)
+	if err != nil {
+		return login, err
+	}
+	concat1 := append(userhex, keyhex...)
+	concat2 := append(timehex, concat1...)
+	hash := Sha256(concat2)
+	login = fmt.Sprintf("%x", hash[0:6])
+	return login, nil
 }

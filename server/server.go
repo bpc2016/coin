@@ -3,7 +3,6 @@ package main
 import (
 	"coin"
 	cpb "coin/service"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -65,28 +64,6 @@ var (
 	resultchan chan cpb.Win   // for the winner decision
 )
 
-/*
-func genName(user string, key string) (string, string, error) {
-	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
-	if err != nil {
-		return "", "", err
-	}
-	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
-	if err != nil {
-		return "", "", err
-	}
-	time := fmt.Sprintf("%x", uint32(time.Now().Unix()))
-	timehex, err := hex.DecodeString(time)
-	if err != nil {
-		return "", "", err
-	}
-	concat1 := append(userhex, keyhex...)
-	concat2 := append(timehex, concat1...)
-	hash := coin.Sha256(concat2)
-	return fmt.Sprintf("%x", hash[0:6]), time, nil //
-}
-*/
-
 var mysql map[string]string
 
 func auth(credentials string) (string, string, bool) {
@@ -95,35 +72,20 @@ func auth(credentials string) (string, string, bool) {
 	time := arr[1]
 	user := arr[2]
 
-	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user))
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
 	key := mysql[user]
 	if key == "" {
 		return "", "", true
 	}
 
-	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
+	expected, err := coin.GenLogin(user, key, time)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	timehex, err := hex.DecodeString(time)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-
-	concat1 := append(userhex, keyhex...)
-	concat2 := append(timehex, concat1...)
-	hash := coin.Sha256(concat2)
-
-	bad := fmt.Sprintf("%x", hash[0:6]) != login
-	if bad {
+	if expected != login {
 		return "", "", true
 	}
 	// otherwise
-	log.Printf("name: %s\ntime: %s\nuser: %s\n", login, time, user)
 	return login, user, false
 }
 
