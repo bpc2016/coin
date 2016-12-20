@@ -2,6 +2,7 @@ package main
 
 import (
 	"coin"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -15,15 +16,16 @@ import (
 )
 
 var (
-	debug  = flag.Bool("d", false, "debug mode")
-	tosses = flag.Int("t", 2, "number of tosses")
-	user   = flag.String("u", "", "the client name")
-	// server      = flag.Int("s", 0, "server offset from 50051 - will include full URL later")
+	debug      = flag.Bool("d", false, "debug mode")
+	tosses     = flag.Int("t", 2, "number of tosses")
+	user       = flag.String("u", "", "the client name")
+	key        = flag.String("k", "", "secret key assigned")
 	serverHost = flag.String("s", "localhost", "server hostname, eg goblimey.com")
-	serverPort = flag.Int("p", 0, "server port offset from 50051.")
+	serverPort = flag.Int("p", -1, "server port offset from 50051.") // no default, see checkMandatoryF
 	maxSleep   = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
 	//myID        uint32
 	serverAlive bool
+	name        string
 )
 
 // annouceWin is what causes the server to issue a cancellation
@@ -114,21 +116,31 @@ func prepare(work *cpb.Work) { //{Coinbase: coinbaseBytes, Block: partblock, Ske
 	*/
 }
 
-func checkMandatoryF() {
-	if *user == "" {
-		log.Fatalf("%s\n", "Client must have identity. Use -u switch")
+func genName(user string, key string) (string, string, error) {
+	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
+	if err != nil {
+		return "", "", err
 	}
+	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
+	if err != nil {
+		return "", "", err
+	}
+	time := fmt.Sprintf("%x", uint32(time.Now().Unix()))
+	timehex, err := hex.DecodeString(time)
+	if err != nil {
+		return "", "", err
+	}
+	concat1 := append(userhex, keyhex...)
+	concat2 := append(timehex, concat1...)
+	hash := coin.Sha256(concat2)
+	return fmt.Sprintf("%x", hash[0:6]), time, nil //
 }
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 	flag.Parse()
 	checkMandatoryF()
-	// address := fmt.Sprintf("localhost:%d", 50051+*server) //"localhost:" + *server
 	address := fmt.Sprintf("%s:%d", *serverHost, 50051+*serverPort) //"localhost:50051"
-	// if *debug {
-	//     log.Printf("connecting to server %s", address)
-	// }
 	debugF("connecting to server %s", address)
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
@@ -137,13 +149,21 @@ func main() {
 	defer conn.Close()
 
 	c := cpb.NewCoinClient(conn)
-	name := *user
+	// name := *user
 	serverAlive = true
 	countdown := 0
 	// outer OMIT
 	for {
-		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name}) // HL
-		if skipF("could not login", err) {                                     // HL
+		n, t, err := genName(*user, *key) // use time as well as these two
+		if err != nil {
+			log.Fatalf("getname error %v\n", err)
+		}
+		log.Printf("name: %s,time: %s\n", n, t)
+		name = n
+		credentials := name + "," + t + "," + *user
+		log.Printf("credentials: %s", credentials)
+		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: credentials}) // HL
+		if skipF("could not login", err) {                                            // HL
 			time.Sleep(5 * time.Second)
 			countdown++
 			if countdown > *maxSleep {
@@ -155,7 +175,6 @@ func main() {
 			serverAlive = true // we are back
 		}
 		log.Printf("Login successful. Assigned id: %d\n", r.Id)
-		//myID = r.Id
 		// main cycle OMIT
 		for {
 			var ( // OMIT
@@ -191,6 +210,19 @@ func main() {
 } // outerend OMIT
 
 // utilities
+
+func checkMandatoryF() {
+	if *user == "" {
+		log.Fatalf("%s\n", "Client must have identity. Use -u switch")
+	}
+	if *serverPort == -1 {
+		log.Fatalf("%s\n", "Client must give server port. Use -p switch")
+	}
+	if *key == "" {
+		log.Fatalf("%s\n", "Client must have secret. Use -k switch")
+	}
+}
+
 func skipF(message string, err error) bool {
 	if err != nil {
 		if *debug {
