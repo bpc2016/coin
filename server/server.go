@@ -3,11 +3,13 @@ package main
 import (
 	"coin"
 	cpb "coin/service"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,7 +31,7 @@ var (
 type lockMap struct {
 	sync.Mutex
 	countIN  int
-	loggedIn map[string]bool
+	loggedIn map[string]string
 }
 
 type blockdata struct {
@@ -63,6 +65,68 @@ var (
 	resultchan chan cpb.Win   // for the winner decision
 )
 
+/*
+func genName(user string, key string) (string, string, error) {
+	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
+	if err != nil {
+		return "", "", err
+	}
+	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
+	if err != nil {
+		return "", "", err
+	}
+	time := fmt.Sprintf("%x", uint32(time.Now().Unix()))
+	timehex, err := hex.DecodeString(time)
+	if err != nil {
+		return "", "", err
+	}
+	concat1 := append(userhex, keyhex...)
+	concat2 := append(timehex, concat1...)
+	hash := coin.Sha256(concat2)
+	return fmt.Sprintf("%x", hash[0:6]), time, nil //
+}
+*/
+
+var mysql map[string]string
+
+func auth(credentials string) (string, string, bool) {
+	arr := strings.Split(credentials, ",")
+	login := arr[0]
+	time := arr[1]
+	user := arr[2]
+
+	userhex, err := hex.DecodeString(fmt.Sprintf("%x", user))
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	key := mysql[user]
+	if key == "" {
+		return "", "", true
+	}
+
+	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+
+	timehex, err := hex.DecodeString(time)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+
+	concat1 := append(userhex, keyhex...)
+	concat2 := append(timehex, concat1...)
+	hash := coin.Sha256(concat2)
+
+	bad := fmt.Sprintf("%x", hash[0:6]) != login
+	if bad {
+		return "", "", true
+	}
+	// otherwise
+	log.Printf("name: %s\ntime: %s\nuser: %s\n", login, time, user)
+	return login, user, false
+}
+
 // Login implements cpb.CoinServer
 func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginReply, error) { // HL
 	users.Lock()
@@ -72,11 +136,13 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	if nxtplus == *numMiners {
 		return nil, errors.New("Capacity reached!")
 	}
-	if _, ok := users.loggedIn[in.Name]; ok {
-		return nil, errors.New("You are already logged in!")
+	// authenticate user
+	login, userid, nogood := auth(in.Name)
+	if nogood {
+		return nil, errors.New("Authentication failure")
 	}
 	users.countIN++
-	users.loggedIn[in.Name] = true     // HL
+	users.loggedIn[login] = userid     // HL
 	return &cpb.LoginReply{Id: 0}, nil // FIXME - we do not need to return any value, not used
 }
 
@@ -147,7 +213,7 @@ type server struct{}
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
-	users.loggedIn["EXTERNAL"] = true //1 // we login conductor here
+	users.loggedIn["EXTERNAL"] = "" //1 // we login conductor here
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -215,7 +281,7 @@ func WaitFor(sign chan string, direction string) {
 func main() {
 	flag.Parse() // HL
 
-	users.loggedIn = make(map[string]bool)
+	users.loggedIn = make(map[string]string)
 	users.countIN = -1
 	*numMiners++      // to include the Conductor (EXTERNAL)
 	if *index == -1 { // mandatory
@@ -230,6 +296,10 @@ func main() {
 	blockchan = make(chan blockdata, 1)     // transfer block data
 	run.ch = make(chan struct{})            // signal to start mining
 	resultchan = make(chan cpb.Win)         // transfer solution data
+
+	mysql = make(map[string]string)
+	mysql["one"] = "thekey"
+	mysql["two"] = "anotherthekey"
 
 	go func() {
 		for {
