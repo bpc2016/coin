@@ -15,8 +15,9 @@ import (
 
 var (
 	debug      = flag.Bool("d", false, "debug mode")
-	numServers = flag.Int("s", 1, "number of servers  each at 50051+i, i =0 ,,,")
+	numServers = flag.Int("n", 1, "number of servers  each at 50051+i, i =0 ,,,")
 	timeOut    = flag.Int("o", 14, "timeout for EXTERNAL")
+	// servers    = flag.String("s", "", "Servers - list url_1:i_1,url_2:i_2, i_j=0,.. port")
 )
 
 // 'search' here models external net: timeout after timeOut seconds
