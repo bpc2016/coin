@@ -15,14 +15,13 @@ import (
 )
 
 var (
-	debug      = flag.Bool("d", false, "debug mode")
-	tosses     = flag.Int("t", 2, "number of tosses")
-	user       = flag.Int("u", 0, "the client owner user id")
-	key        = flag.String("k", "", "secret key assigned")
-	serverHost = flag.String("s", "localhost", "server hostname, eg goblimey.com")
-	serverPort = flag.Int("p", -1, "server port offset from 50051.") // no default, see checkMandatoryF
-	maxSleep   = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
-	//myID        uint32
+	debug       = flag.Bool("d", false, "debug mode")
+	tosses      = flag.Int("t", 2, "number of tosses")
+	user        = flag.Int("u", 0, "the client owner user id")
+	key         = flag.String("k", "", "secret key assigned")
+	serverHost  = flag.String("s", "localhost", "server hostname, eg goblimey.com")
+	serverPort  = flag.Int("p", -1, "server port offset from 50051.") // no default, see checkMandatoryF
+	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
 	serverAlive bool
 	name        string
 )
@@ -150,8 +149,6 @@ func main() {
 		}
 		log.Printf("name: %s,time: %s\n", n, t)
 		name = n
-		//credentials := name + "," + t + "," + *user
-		// log.Printf("credentials: %s", credentials)
 		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name, User: userID, Time: t}) // HL
 		if skipF("could not login", err) {                                                            // HL
 			time.Sleep(5 * time.Second)

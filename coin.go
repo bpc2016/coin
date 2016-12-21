@@ -102,19 +102,10 @@ func Reverse(s []byte) []byte {
 // GenLogin generates the login for use by client given user, key and time
 func GenLogin(user uint32, key string, time string) (string, error) {
 	login := ""
-	// userhex, err := hex.DecodeString(fmt.Sprintf("%x", user)) // *user
-	// if err != nil {
-	// 	return login, err
-	// }
-
+	// the userid
 	userbytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(userbytes, user)
-	// InputTxn - here all zeros
-	// coinbaseInput := make([]byte, 32) // all 0s
-	// //Ouput index of input transaction -1 for coinbase
-	// outputIndexBytes := make([]byte, 4)
-	// binary.BigEndian.PutUint32(outputIndexBytes, 0xffffffff)
-
+	// the key
 	keyhex, err := hex.DecodeString(fmt.Sprintf("%x", key)) // *key
 	if err != nil {
 		return login, err

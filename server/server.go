@@ -66,21 +66,14 @@ var (
 var mysql map[uint32]string
 
 func auth(login string, time string, userid uint32) (string, bool) {
-	// arr := strings.Split(credentials, ",")
-	// login := arr[0]
-	// time := arr[1]
-	// user := arr[2]
-
 	key := mysql[userid]
 	if key == "" {
 		return "", true
 	}
-
 	expected, err := coin.GenLogin(userid, key, time)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-
 	if expected != login {
 		return "", true
 	}
