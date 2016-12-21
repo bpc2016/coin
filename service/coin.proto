@@ -28,7 +28,9 @@ service Coin {
 
 // The Login request message containing the user's name.
 message LoginRequest {
-  string name = 1;
+  string name = 1;  // really the login
+  string time = 2;  // unix time as hex string
+  uint32 user = 3;  // owner of miner machine - uuid
 }
 
 // GetWork request carries the same name as login
