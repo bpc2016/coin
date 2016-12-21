@@ -17,7 +17,7 @@ import (
 var (
 	debug      = flag.Bool("d", false, "debug mode")
 	tosses     = flag.Int("t", 2, "number of tosses")
-	user       = flag.String("u", "", "the client name")
+	user       = flag.Int("u", 0, "the client owner user id")
 	key        = flag.String("k", "", "secret key assigned")
 	serverHost = flag.String("s", "localhost", "server hostname, eg goblimey.com")
 	serverPort = flag.Int("p", -1, "server port offset from 50051.") // no default, see checkMandatoryF
@@ -117,7 +117,7 @@ func prepare(work *cpb.Work) { //{Coinbase: coinbaseBytes, Block: partblock, Ske
 
 // genName takes userid and key to generate
 // a login and time
-func genName(user string, key string) (string, string, error) {
+func genName(user uint32, key string) (string, string, error) {
 	time := fmt.Sprintf("%x", uint32(time.Now().Unix()))
 	login, err := coin.GenLogin(user, key, time)
 	if err != nil {
@@ -139,21 +139,21 @@ func main() {
 	defer conn.Close()
 
 	c := cpb.NewCoinClient(conn)
-	// name := *user
 	serverAlive = true
 	countdown := 0
 	// outer OMIT
 	for {
-		n, t, err := genName(*user, *key) // use time as well as these two
+		userID := uint32(*user)
+		n, t, err := genName(userID, *key) // use time as well as these two
 		if err != nil {
 			log.Fatalf("getname error %v\n", err)
 		}
 		log.Printf("name: %s,time: %s\n", n, t)
 		name = n
-		credentials := name + "," + t + "," + *user
-		log.Printf("credentials: %s", credentials)
-		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: credentials}) // HL
-		if skipF("could not login", err) {                                            // HL
+		//credentials := name + "," + t + "," + *user
+		// log.Printf("credentials: %s", credentials)
+		r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name, User: userID, Time: t}) // HL
+		if skipF("could not login", err) {                                                            // HL
 			time.Sleep(5 * time.Second)
 			countdown++
 			if countdown > *maxSleep {
@@ -202,7 +202,7 @@ func main() {
 // utilities
 
 func checkMandatoryF() {
-	if *user == "" {
+	if *user == 0 {
 		log.Fatalf("%s\n", "Client must have identity. Use -u switch")
 	}
 	if *serverPort == -1 {
