@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +29,7 @@ var (
 type lockMap struct {
 	sync.Mutex
 	countIN  int
-	loggedIn map[string]string
+	loggedIn map[string]uint32
 }
 
 type blockdata struct {
@@ -64,29 +63,29 @@ var (
 	resultchan chan cpb.Win   // for the winner decision
 )
 
-var mysql map[string]string
+var mysql map[uint32]string
 
-func auth(credentials string) (string, string, bool) {
-	arr := strings.Split(credentials, ",")
-	login := arr[0]
-	time := arr[1]
-	user := arr[2]
+func auth(login string, time string, userid uint32) (string, bool) {
+	// arr := strings.Split(credentials, ",")
+	// login := arr[0]
+	// time := arr[1]
+	// user := arr[2]
 
-	key := mysql[user]
+	key := mysql[userid]
 	if key == "" {
-		return "", "", true
+		return "", true
 	}
 
-	expected, err := coin.GenLogin(user, key, time)
+	expected, err := coin.GenLogin(userid, key, time)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
 	if expected != login {
-		return "", "", true
+		return "", true
 	}
 	// otherwise
-	return login, user, false
+	return login, false
 }
 
 // Login implements cpb.CoinServer
@@ -97,14 +96,15 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	// fmt.Println("countIN:", users.countIN, " MINERS:", *numMiners)  // OMIT
 	if nxtplus == *numMiners {
 		return nil, errors.New("Capacity reached!")
+
 	}
 	// authenticate user
-	login, userid, nogood := auth(in.Name)
+	login, nogood := auth(in.Name, in.Time, in.User)
 	if nogood {
 		return nil, errors.New("Authentication failure")
 	}
 	users.countIN++
-	users.loggedIn[login] = userid     // HL
+	users.loggedIn[login] = in.User    // HL
 	return &cpb.LoginReply{Id: 0}, nil // FIXME - we do not need to return any value, not used
 }
 
@@ -175,7 +175,7 @@ type server struct{}
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
-	users.loggedIn["EXTERNAL"] = "" //1 // we login conductor here
+	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -243,7 +243,7 @@ func WaitFor(sign chan string, direction string) {
 func main() {
 	flag.Parse() // HL
 
-	users.loggedIn = make(map[string]string)
+	users.loggedIn = make(map[string]uint32)
 	users.countIN = -1
 	*numMiners++      // to include the Conductor (EXTERNAL)
 	if *index == -1 { // mandatory
@@ -259,9 +259,9 @@ func main() {
 	run.ch = make(chan struct{})            // signal to start mining
 	resultchan = make(chan cpb.Win)         // transfer solution data
 
-	mysql = make(map[string]string)
-	mysql["one"] = "thekey"
-	mysql["two"] = "anotherthekey"
+	mysql = make(map[uint32]string)
+	mysql[1] = "thekey"
+	mysql[2] = "anotherthekey"
 
 	go func() {
 		for {
