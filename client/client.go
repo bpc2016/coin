@@ -4,11 +4,14 @@ import (
 	"coin"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"time"
 
 	cpb "coin/service"
+
+	"encoding/json"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -22,6 +25,7 @@ var (
 	serverHost  = flag.String("s", "localhost", "server hostname, eg goblimey.com")
 	serverPort  = flag.Int("p", -1, "server port offset from 50051.") // no default, see checkMandatoryF
 	maxSleep    = flag.Int("quit", 4, "number of multiples of 5 seconds before server declared dead")
+	config      = flag.String("f", "", "config file of options")
 	serverAlive bool
 	name        string
 )
@@ -125,11 +129,38 @@ func genName(user uint32, key string) (string, string, error) {
 	return login, time, nil //
 }
 
+type jsonConfig struct {
+	User   int
+	Key    string
+	Server string
+	Port   int
+}
+
+func readConfig(filename string) {
+	jsondata, err := ioutil.ReadFile("./" + filename)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	var config jsonConfig
+	if err := json.Unmarshal(jsondata, &config); err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	// fmt.Printf("%+v", config) // debug
+	// check these are set?
+	*user = config.User
+	*serverHost = config.Server
+	*serverPort = config.Port
+	*key = config.Key
+}
+
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 	flag.Parse()
-	checkMandatoryF()
-	address := fmt.Sprintf("%s:%d", *serverHost, 50051+*serverPort) //"localhost:50051"
+	if *config != "" {
+		readConfig(*config)
+	}
+	checkMandatoryF() // ensure enough config data
+	address := fmt.Sprintf("%s:%d", *serverHost, 50051+*serverPort)
 	debugF("connecting to server %s", address)
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
