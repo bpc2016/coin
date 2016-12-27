@@ -65,7 +65,7 @@ func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop
 	endLoop <- struct{}{}     // quit loop
 }
 
-var servers []cpb.CoinClient
+var dialedServers []cpb.CoinClient
 
 // getResult makes a blocking request to the server
 func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry chan struct{}) {
@@ -92,7 +92,7 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
 		}
 		theWinner <- str // HL
-		for i, c := range servers {
+		for i, c := range dialedServers {
 			if uint32(i) == index || !alive[c] {
 				continue
 			}
@@ -268,7 +268,7 @@ func main() {
 		}
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
-		servers = append(servers, c)
+		dialedServers = append(dialedServers, c)
 		alive[c] = true
 	}
 	// OMIT
@@ -280,7 +280,7 @@ func main() {
 		theWinner := make(chan string, *numServers)       //  OMIT
 		u, l, blk, m, h, bts := newBlock()                // next block
 		// OMIT
-		for _, c := range servers {
+		for _, c := range dialedServers {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
