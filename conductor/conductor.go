@@ -114,27 +114,6 @@ func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) boo
 
 var alive map[cpb.CoinClient]bool
 
-// utilities
-
-// skipF is a per connection function. logs message and returns true if err
-// otherwise returns false. it also maintains the alive[] map
-func skipF(c cpb.CoinClient, message string, err error) bool {
-	if err != nil {
-		log.Printf("SF: "+message+": %v", err)
-		if alive[c] {
-			alive[c] = false
-		}
-		return true // we have skipped
-	}
-	return false
-}
-
-func debugF(format string, args ...interface{}) {
-	if *debug {
-		log.Printf(format, args...)
-	}
-}
-
 // newBlock packages the block information that becomes 'work' for each run
 func newBlock() (upper, lower, bheader, merkle []byte, blockheight, bits uint32) { // TODO - this data NOT fixed
 	blockHeight := uint32(433789) // should come from unix time
@@ -365,3 +344,24 @@ func main() {
 		fmt.Println(<-theWinner, "\n---------------------------") // a OMIT
 	}
 } // c OMIT
+
+// utilities
+
+// skipF is a per connection function. logs message and returns true if err
+// otherwise returns false. it also maintains the alive[] map
+func skipF(c cpb.CoinClient, message string, err error) bool {
+	if err != nil {
+		// log.Printf("SF: "+message+": %v", err)
+		if alive[c] {
+			alive[c] = false
+		}
+		return true // we have skipped
+	}
+	return false
+}
+
+func debugF(format string, args ...interface{}) {
+	if *debug {
+		log.Printf(format, args...)
+	}
+}
