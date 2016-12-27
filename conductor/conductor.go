@@ -256,7 +256,6 @@ func main() {
 	numServers = len(myServers)
 	alive = make(map[cpb.CoinClient]bool)
 	for index := 0; index < numServers; index++ {
-		// addr := fmt.Sprintf("localhost:%d", 50051+index)
 		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
 		if err != nil {
@@ -275,47 +274,52 @@ func main() {
 		lateEntry := make(chan struct{})                 // no more results please OMIT
 		theWinner := make(chan string, numServers)       //  OMIT
 		u, l, blk, m, h, bts := newBlock()               // next block
+
+		waitAbit := make(chan struct{}, numServers)
 		// OMIT
 		for _, c := range dialedServers {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
 				theWinner chan string, lateEntry chan struct{}) {
-				retry := true
-				for retry {
-					_, err := c.IssueBlock(context.Background(), // HL
-						&cpb.IssueBlockRequest{ // HL
-							Upper:       u,   // OMIT
-							Lower:       l,   // OMIT
-							Block:       blk, // OMIT
-							Merkle:      m,   // OMIT
-							Blockheight: h,   // OMIT
-							Bits:        bts})
-					if skipF(c, "could not issue block", err) {
-						if numServers > 1 {
-							return // skip only if > 1 servers, else wait
-						}
-					} else {
-						retry = false // exit this for loop
-					}
+				// start with block issue
+				_, err := c.IssueBlock(context.Background(), // HL
+					&cpb.IssueBlockRequest{ // HL
+						Upper:       u,   // OMIT
+						Lower:       l,   // OMIT
+						Block:       blk, // OMIT
+						Merkle:      m,   // OMIT
+						Blockheight: h,   // OMIT
+						Bits:        bts})
+				if skipF(c, "could not issue block", err) {
+					waitAbit <- struct{}{}
+					return
 				}
+				// THE BLOCKING NATURE BELWO IS A PROBLEM
 				// conductor handles results OMIT
 				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
 					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
 				if skipF(c, "could not reconnect", err) { // HL
+					waitAbit <- struct{}{}
 					return
 				} else if !alive[c] { // HL
 					alive[c] = true
 				}
 				//  OMIT
 				serverUpChan <- r.Work // HL
+				waitAbit <- struct{}{}
 				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
+		// wait a bit ...
+		for i := 0; i < numServers; i++ {
+			<-waitAbit
+		}
 		//  collect the work request acks from servers b OMIT
 		for c := range alive {
+			// fmt.Printf("RANGE ALIVE? %v : %v\n", c, alive[c])
 			if !alive[c] {
 				continue
 			}
@@ -332,6 +336,7 @@ func main() {
 		}
 		//  wait for server cancellation responses
 		for c := range alive {
+			fmt.Println("serverUpChanRANGE ALIVE 2")
 			if !alive[c] {
 				continue
 			}
