@@ -317,9 +317,9 @@ func main() {
 		for i := 0; i < numServers; i++ {
 			<-waitAbit
 		}
+		// REMOVE THIS ...
 		//  collect the work request acks from servers b OMIT
 		for c := range alive {
-			// fmt.Printf("RANGE ALIVE? %v : %v\n", c, alive[c])
 			if !alive[c] {
 				continue
 			}
