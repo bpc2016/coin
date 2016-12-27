@@ -16,10 +16,12 @@ import (
 )
 
 var (
-	debug      = flag.Bool("d", false, "debug mode")
-	servers    = flag.String("s", "", "Servers - list url_1:i_1,url_2:i_2, i_j=0,.. port")
-	timeOut    = flag.Int("o", 14, "timeout for EXTERNAL")
-	numServers int // count of expected servers
+	debug         = flag.Bool("d", false, "debug mode")
+	servers       = flag.String("s", "", "Servers - list url_1:i_1,url_2:i_2, i_j=0,.. port")
+	timeOut       = flag.Int("o", 14, "timeout for EXTERNAL")
+	numServers    int // count of expected servers
+	dialedServers []cpb.CoinClient
+	alive         map[cpb.CoinClient]bool
 )
 
 type server struct {
@@ -51,17 +53,6 @@ func search(stopLooking chan struct{}) (uint32, bool) {
 	return theNonce, ok
 }
 
-// login to server c, returns a id
-func login(c cpb.CoinClient, name string) uint32 {
-	r, err := c.Login(context.Background(), &cpb.LoginRequest{Name: name})
-	if skipF(c, "could not login", err) {
-		return 0
-	}
-
-	log.Printf("Login successful. Assigned id: %d\n", r.Id)
-	return r.Id
-}
-
 // getCancel makes a blocking request to the server
 func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop chan struct{}) {
 	_, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
@@ -71,8 +62,6 @@ func getCancel(c cpb.CoinClient, name string, stopLooking chan struct{}, endLoop
 	stopLooking <- struct{}{} // stop search
 	endLoop <- struct{}{}     // quit loop
 }
-
-var dialedServers []cpb.CoinClient
 
 // getResult makes a blocking request to the server
 func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry chan struct{}) {
@@ -118,8 +107,6 @@ func annouceWin(c cpb.CoinClient, nonce uint32, block []byte, winner string) boo
 	}
 	return r.Ok
 }
-
-var alive map[cpb.CoinClient]bool
 
 // newBlock packages the block information that becomes 'work' for each run
 func newBlock() (upper, lower, bheader, merkle []byte, blockheight, bits uint32) { // TODO - this data NOT fixed
@@ -332,7 +319,8 @@ func main() {
 			if !alive[c] {
 				continue
 			}
-			debugF("server up: %+v\n", <-serverUpChan)
+			<-serverUpChan
+			debugF("server up: %v\n", c)
 		}
 		// OMIT
 		debugF("%s\n", "...") // OMIT
