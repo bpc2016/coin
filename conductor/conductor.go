@@ -336,7 +336,6 @@ func main() {
 		}
 		//  wait for server cancellation responses
 		for c := range alive {
-			fmt.Println("serverUpChanRANGE ALIVE 2")
 			if !alive[c] {
 				continue
 			}
