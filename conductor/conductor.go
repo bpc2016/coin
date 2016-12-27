@@ -351,7 +351,7 @@ func main() {
 // otherwise returns false. it also maintains the alive[] map
 func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
-		// log.Printf("SF: "+message+": %v", err)
+		log.Printf("SF: "+message+": %v", err)
 		if alive[c] {
 			alive[c] = false
 		}
