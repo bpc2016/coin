@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 
 	cpb "coin/service"
@@ -15,10 +17,15 @@ import (
 
 var (
 	debug      = flag.Bool("d", false, "debug mode")
-	numServers = flag.Int("n", 1, "number of servers  each at 50051+i, i =0 ,,,")
+	servers    = flag.String("s", "", "Servers - list url_1:i_1,url_2:i_2, i_j=0,.. port")
 	timeOut    = flag.Int("o", 14, "timeout for EXTERNAL")
-	// servers    = flag.String("s", "", "Servers - list url_1:i_1,url_2:i_2, i_j=0,.. port")
+	numServers int // count of expected servers
 )
+
+type server struct {
+	host string
+	port int
+}
 
 // 'search' here models external net: timeout after timeOut seconds
 func search(stopLooking chan struct{}) (uint32, bool) {
@@ -86,7 +93,7 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 	default:
 		close(lateEntry) // HL
 		str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
-		if index == uint32(*numServers) {
+		if index == uint32(numServers) {
 			str += "external" // HL
 		} else {
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
@@ -258,13 +265,15 @@ func merkleRoot() []byte {
 
 func main() {
 	flag.Parse()
+	myServers := checkMandatoryF()
+	numServers = len(myServers)
 	alive = make(map[cpb.CoinClient]bool)
-	for index := 0; index < *numServers; index++ {
-		addr := fmt.Sprintf("localhost:%d", 50051+index)
+	for index := 0; index < numServers; index++ {
+		// addr := fmt.Sprintf("localhost:%d", 50051+index)
+		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
 		if err != nil {
 			log.Fatalf("fail to dial: %v", err)
-			continue
 		}
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
@@ -273,12 +282,12 @@ func main() {
 	}
 	// OMIT
 	for {
-		stopLooking := make(chan struct{}, *numServers)   // for search OMIT
-		endLoop := make(chan struct{}, *numServers)       // for this loop OMIT
-		serverUpChan := make(chan *cpb.Work, *numServers) // for gathering signins OMIT
-		lateEntry := make(chan struct{})                  // no more results please OMIT
-		theWinner := make(chan string, *numServers)       //  OMIT
-		u, l, blk, m, h, bts := newBlock()                // next block
+		stopLooking := make(chan struct{}, numServers)   // for search OMIT
+		endLoop := make(chan struct{}, numServers)       // for this loop OMIT
+		serverUpChan := make(chan *cpb.Work, numServers) // for gathering signins OMIT
+		lateEntry := make(chan struct{})                 // no more results please OMIT
+		theWinner := make(chan string, numServers)       //  OMIT
+		u, l, blk, m, h, bts := newBlock()               // next block
 		// OMIT
 		for _, c := range dialedServers {
 			go func(c cpb.CoinClient, // HL
@@ -295,7 +304,7 @@ func main() {
 							Blockheight: h,   // OMIT
 							Bits:        bts})
 					if skipF(c, "could not issue block", err) {
-						if *numServers > 1 {
+						if numServers > 1 {
 							return // skip only if > 1 servers, else wait
 						}
 					} else {
@@ -323,14 +332,14 @@ func main() {
 			if !alive[c] {
 				continue
 			}
-			debugF("%+v\n", <-serverUpChan)
+			debugF("server up: %+v\n", <-serverUpChan)
 		}
 		// OMIT
 		debugF("%s\n", "...") // OMIT
 		// 'search' - as the common 'External' miner
 		theNonce, ok := search(stopLooking)
 		if ok {
-			declareWin(theWinner, lateEntry, uint32(*numServers), // HL
+			declareWin(theWinner, lateEntry, uint32(numServers), // HL
 				"external", theNonce)
 		}
 		//  wait for server cancellation responses
@@ -364,4 +373,22 @@ func debugF(format string, args ...interface{}) {
 	if *debug {
 		log.Printf(format, args...)
 	}
+}
+
+func checkMandatoryF() []server {
+	if *servers == "" {
+		log.Fatalf("%s\n", "Conductor must set servers. Use -s switch")
+	}
+	var servList []server
+	cl := strings.Split(*servers, ",")
+	for _, v := range cl {
+		w := strings.Split(v, ":")
+		s := w[0]
+		p, err := strconv.Atoi(w[1])
+		if err != nil {
+			log.Fatalf("Servers type error : %s\n%v\n", w, err)
+		}
+		servList = append(servList, server{s, p})
+	}
+	return servList
 }
