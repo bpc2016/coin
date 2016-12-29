@@ -70,26 +70,27 @@ func getResult(c cpb.CoinClient, name string, theWinner chan string, lateEntry c
 	}
 
 	if res.Winner.Identity != "EXTERNAL" { // avoid echoes
-		declareWin(theWinner, lateEntry, res.Index, res.Winner.Identity, res.Winner.Nonce) // HL
+		declareWin(theWinner, lateEntry, int(res.Index), res.Winner.Identity, res.Winner.Nonce) // HL
 	}
 }
 
 func declareWin(theWinner chan string, lateEntry chan struct{},
-	index uint32, coinbase string, nonce uint32) {
+	index int, coinbase string, nonce uint32) {
+	// index uint32, coinbase string, nonce uint32) {
 	select {
 	case <-lateEntry: // we already have declared a winner, do nothing
 	default:
 		close(lateEntry) // HL
 		str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
-		if index == uint32(numServers) {
+		if index == -1 { //indicates winner is external //uint32(numServers) {
 			str += "external" // HL
 		} else {
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
 		}
 		theWinner <- str // HL
-		for i, c := range dialedServers {
-			// if uint32(i) == index || !alive[c] {
-			if uint32(i) == index || isDead(c) {
+		for _, c := range dialedServers {
+			// if uint32(i) == index || isDead(c) { // trouble is index isnt fixed!!
+			if isDead(c) {
 				continue
 			}
 			annouceWin(c, 99, []byte{}, "EXTERNAL") // bogus  announcement
@@ -250,16 +251,17 @@ func merkleRoot() []byte {
 	return skel
 }
 
-// active[c] is now a struct{} channel that is closed when the
+// active[c] is now a struct{} *buffered* channel that is closed when the
 // server c is no longer reachable. Tested by isDead(c)
 var active map[cpb.CoinClient]chan (struct{})
 
 func isDead(c cpb.CoinClient) bool {
 	select {
 	case <-active[c]:
-		return true
-	default:
+		active[c] <- struct{}{} // refill, so isDead again is false
 		return false
+	default:
+		return true // so active is empty
 	}
 }
 
@@ -277,8 +279,11 @@ func main() {
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
 		dialedServers = append(dialedServers, c)
-		active[c] = make(chan struct{})
+		active[c] = make(chan struct{}, 1)
+		active[c] <- struct{}{} //  is alive!
 	}
+
+	blockSendDone := make(chan struct{}, numServers) // for the next loop
 	// OMIT
 	for {
 		stopLooking := make(chan struct{}, numServers)   // for search OMIT
@@ -302,26 +307,34 @@ func main() {
 						Blockheight: h,   // OMIT
 						Bits:        bts})
 				if skipF(c, "could not issue block", err) {
+					blockSendDone <- struct{}{}
 					return
 				}
+				blockSendDone <- struct{}{}
+				// conductor handles results OMIT
+				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
 					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
 				if skipF(c, "could not reconnect", err) { // HL
 					return
 				} else if isDead(c) { // were we previously decalred dead? change that ..
-					active[c] = make(chan struct{}) // 'revive' us
+					active[c] <- struct{}{} // 'revive' us
 				}
 				serverUpChan <- r.Work // HL
 				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
-				// conductor handles results OMIT
-				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
+		// wait a bit - drain blockSendDone
+		for i := 0; i < numServers; i++ {
+			<-blockSendDone
+		}
+
 		//  collect the work request acks from servers b OMIT
 		for _, c := range dialedServers {
 			if isDead(c) {
+				debugF("server DOWN: %v\n", c)
 				continue
 			}
 			<-serverUpChan
@@ -332,7 +345,7 @@ func main() {
 		// 'search' - as the common 'External' miner
 		theNonce, ok := search(stopLooking)
 		if ok {
-			declareWin(theWinner, lateEntry, uint32(numServers), // HL
+			declareWin(theWinner, lateEntry, -1, // HL
 				"external", theNonce)
 		}
 		//  wait for server cancellation responses
@@ -355,7 +368,7 @@ func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
 		log.Printf("SF: "+message+": %v", err)
 		if !isDead(c) {
-			close(active[c]) // so that we are truly dead
+			<-active[c] // drain active[c] so that we are truly dead
 		}
 		return true // we have skipped
 	}
