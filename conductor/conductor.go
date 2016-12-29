@@ -21,7 +21,7 @@ var (
 	timeOut       = flag.Int("o", 14, "timeout for EXTERNAL")
 	numServers    int // count of expected servers
 	dialedServers []cpb.CoinClient
-	alive         map[cpb.CoinClient]bool
+	// alive         map[cpb.CoinClient]bool
 )
 
 type server struct {
@@ -89,7 +89,8 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 		}
 		theWinner <- str // HL
 		for i, c := range dialedServers {
-			if uint32(i) == index || !alive[c] {
+			// if uint32(i) == index || !alive[c] {
+			if uint32(i) == index || isDead(c) {
 				continue
 			}
 			annouceWin(c, 99, []byte{}, "EXTERNAL") // bogus  announcement
@@ -250,11 +251,25 @@ func merkleRoot() []byte {
 	return skel
 }
 
+// dead[c] is now a struct{} channel that we fill when the server is up
+// we test ....
+var dead map[cpb.CoinClient]chan (struct{})
+
+func isDead(c cpb.CoinClient) bool {
+	select {
+	case <-dead[c]:
+		return true
+	default:
+		return false
+	}
+}
+
 func main() {
 	flag.Parse()
 	myServers := checkMandatoryF()
 	numServers = len(myServers)
-	alive = make(map[cpb.CoinClient]bool)
+	// alive = make(map[cpb.CoinClient]bool)
+	dead = make(map[cpb.CoinClient]chan (struct{}))
 	for index := 0; index < numServers; index++ {
 		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
@@ -264,7 +279,8 @@ func main() {
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
 		dialedServers = append(dialedServers, c)
-		alive[c] = true
+		// alive[c] = true
+		dead[c] = make(chan struct{})
 	}
 	// OMIT
 	for {
@@ -303,9 +319,12 @@ func main() {
 				if skipF(c, "could not reconnect", err) { // HL
 					waitAbit <- struct{}{}
 					return
-				} else if !alive[c] { // HL
-					alive[c] = true
+				} else if isDead(c) {
+					dead[c] = make(chan struct{}) // 'revive' us
 				}
+				// if !alive[c] { // HL
+				// 	alive[c] = true
+				// }
 				//  OMIT
 				serverUpChan <- r.Work // HL
 				waitAbit <- struct{}{}
@@ -319,8 +338,12 @@ func main() {
 		}
 		// REMOVE THIS ...
 		//  collect the work request acks from servers b OMIT
-		for c := range alive {
-			if !alive[c] {
+		// for c := range alive {
+		// 	if !alive[c] {
+		// 		continue
+		// 	}
+		for _, c := range dialedServers {
+			if isDead(c) {
 				continue
 			}
 			<-serverUpChan
@@ -335,8 +358,12 @@ func main() {
 				"external", theNonce)
 		}
 		//  wait for server cancellation responses
-		for c := range alive {
-			if !alive[c] {
+		// for c := range alive {
+		// 	if !alive[c] {
+		// 		continue
+		// 	}
+		for _, c := range dialedServers {
+			if isDead(c) {
 				continue
 			}
 			<-endLoop // wait for cancellation from each server
@@ -353,8 +380,11 @@ func main() {
 func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
 		log.Printf("SF: "+message+": %v", err)
-		if alive[c] {
-			alive[c] = false
+		// if alive[c] {
+		// 	alive[c] = false
+		// }
+		if !isDead(c) {
+			close(dead[c]) // so that we are dead
 		}
 		return true // we have skipped
 	}
