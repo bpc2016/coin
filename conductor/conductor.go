@@ -21,7 +21,6 @@ var (
 	timeOut       = flag.Int("o", 14, "timeout for EXTERNAL")
 	numServers    int // count of expected servers
 	dialedServers []cpb.CoinClient
-	// alive         map[cpb.CoinClient]bool
 )
 
 type server struct {
@@ -251,13 +250,13 @@ func merkleRoot() []byte {
 	return skel
 }
 
-// dead[c] is now a struct{} channel that we fill when the server is up
-// we test ....
-var dead map[cpb.CoinClient]chan (struct{})
+// active[c] is now a struct{} channel that is closed when the
+// server c is no longer reachable. Tested by isDead(c)
+var active map[cpb.CoinClient]chan (struct{})
 
 func isDead(c cpb.CoinClient) bool {
 	select {
-	case <-dead[c]:
+	case <-active[c]:
 		return true
 	default:
 		return false
@@ -268,8 +267,7 @@ func main() {
 	flag.Parse()
 	myServers := checkMandatoryF()
 	numServers = len(myServers)
-	// alive = make(map[cpb.CoinClient]bool)
-	dead = make(map[cpb.CoinClient]chan (struct{}))
+	active = make(map[cpb.CoinClient]chan (struct{}))
 	for index := 0; index < numServers; index++ {
 		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
@@ -279,8 +277,7 @@ func main() {
 		defer conn.Close()
 		c := cpb.NewCoinClient(conn) // note that we do not login!
 		dialedServers = append(dialedServers, c)
-		// alive[c] = true
-		dead[c] = make(chan struct{})
+		active[c] = make(chan struct{})
 	}
 	// OMIT
 	for {
@@ -291,8 +288,6 @@ func main() {
 		theWinner := make(chan string, numServers)       //  OMIT
 		u, l, blk, m, h, bts := newBlock()               // next block
 
-		waitAbit := make(chan struct{}, numServers)
-		// OMIT
 		for _, c := range dialedServers {
 			go func(c cpb.CoinClient, // HL
 				stopLooking chan struct{}, endLoop chan struct{},
@@ -307,41 +302,25 @@ func main() {
 						Blockheight: h,   // OMIT
 						Bits:        bts})
 				if skipF(c, "could not issue block", err) {
-					waitAbit <- struct{}{}
 					return
 				}
-				// THE BLOCKING NATURE BELWO IS A PROBLEM
 				// conductor handles results OMIT
 				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
 					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
 				if skipF(c, "could not reconnect", err) { // HL
-					waitAbit <- struct{}{}
 					return
 				} else if isDead(c) {
-					dead[c] = make(chan struct{}) // 'revive' us
+					active[c] = make(chan struct{}) // 'revive' us
 				}
-				// if !alive[c] { // HL
-				// 	alive[c] = true
-				// }
-				//  OMIT
+
 				serverUpChan <- r.Work // HL
-				waitAbit <- struct{}{}
 				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
-		// wait a bit ...
-		for i := 0; i < numServers; i++ {
-			<-waitAbit
-		}
-		// REMOVE THIS ...
 		//  collect the work request acks from servers b OMIT
-		// for c := range alive {
-		// 	if !alive[c] {
-		// 		continue
-		// 	}
 		for _, c := range dialedServers {
 			if isDead(c) {
 				continue
@@ -358,10 +337,6 @@ func main() {
 				"external", theNonce)
 		}
 		//  wait for server cancellation responses
-		// for c := range alive {
-		// 	if !alive[c] {
-		// 		continue
-		// 	}
 		for _, c := range dialedServers {
 			if isDead(c) {
 				continue
@@ -380,11 +355,8 @@ func main() {
 func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
 		log.Printf("SF: "+message+": %v", err)
-		// if alive[c] {
-		// 	alive[c] = false
-		// }
 		if !isDead(c) {
-			close(dead[c]) // so that we are dead
+			close(active[c]) // so that we are active
 		}
 		return true // we have skipped
 	}
