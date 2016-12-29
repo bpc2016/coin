@@ -304,20 +304,19 @@ func main() {
 				if skipF(c, "could not issue block", err) {
 					return
 				}
-				// conductor handles results OMIT
-				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// get ready, get set ... this needs to block  OMIT
 				r, err := c.GetWork(context.Background(), // HL
 					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
 				if skipF(c, "could not reconnect", err) { // HL
 					return
-				} else if isDead(c) {
+				} else if isDead(c) { // were we previously decalred dead? change that ..
 					active[c] = make(chan struct{}) // 'revive' us
 				}
-
 				serverUpChan <- r.Work // HL
 				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
+				// conductor handles results OMIT
+				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
 		}
 		//  collect the work request acks from servers b OMIT
