@@ -82,14 +82,13 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 	default:
 		close(lateEntry) // HL
 		str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
-		if index == -1 { //indicates winner is external //uint32(numServers) {
+		if index == -1 { //indicates winner is external
 			str += "external" // HL
 		} else {
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
 		}
 		theWinner <- str // HL
 		for _, c := range dialedServers {
-			// if uint32(i) == index || isDead(c) { // trouble is index isnt fixed!!
 			if isDead(c) {
 				continue
 			}
@@ -251,7 +250,7 @@ func merkleRoot() []byte {
 	return skel
 }
 
-// active[c] is now a struct{} *buffered* channel that is closed when the
+// active[c] is now a struct{} *buffered* channel that is empty
 // server c is no longer reachable. Tested by isDead(c)
 var active map[cpb.CoinClient]chan (struct{})
 
@@ -286,12 +285,12 @@ func main() {
 	blockSendDone := make(chan struct{}, numServers) // for the next loop
 	// OMIT
 	for {
-		stopLooking := make(chan struct{}, numServers)   // for search OMIT
-		endLoop := make(chan struct{}, numServers)       // for this loop OMIT
-		serverUpChan := make(chan *cpb.Work, numServers) // for gathering signins OMIT
-		lateEntry := make(chan struct{})                 // no more results please OMIT
-		theWinner := make(chan string, numServers)       //  OMIT
-		u, l, blk, m, h, bts := newBlock()               // next block
+		stopLooking := make(chan struct{}, numServers)    // for search OMIT
+		endLoop := make(chan struct{}, numServers)        // for this loop OMIT
+		serverWrkAcks := make(chan *cpb.Work, numServers) // for gathering signins OMIT
+		lateEntry := make(chan struct{})                  // no more results please OMIT
+		theWinner := make(chan string, numServers)        //  OMIT
+		u, l, blk, m, h, bts := newBlock()                // next block
 
 		for _, c := range dialedServers {
 			go func(c cpb.CoinClient, // HL
@@ -311,9 +310,7 @@ func main() {
 					return
 				}
 				blockSendDone <- struct{}{}
-				// conductor handles results OMIT
-				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
-				// get ready, get set ... this needs to block  OMIT
+				// get ready, get set ... this blocks!  OMIT
 				r, err := c.GetWork(context.Background(), // HL
 					&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
 				if skipF(c, "could not reconnect", err) { // HL
@@ -321,7 +318,9 @@ func main() {
 				} else if isDead(c) { // were we previously decalred dead? change that ..
 					active[c] <- struct{}{} // 'revive' us
 				}
-				serverUpChan <- r.Work // HL
+				serverWrkAcks <- r.Work // HL
+				// conductor handles results OMIT
+				go getResult(c, "EXTERNAL", theWinner, lateEntry) // HL
 				// in parallel - seek cancellation OMIT
 				go getCancel(c, "EXTERNAL", stopLooking, endLoop)
 			}(c, stopLooking, endLoop, theWinner, lateEntry)
@@ -330,14 +329,13 @@ func main() {
 		for i := 0; i < numServers; i++ {
 			<-blockSendDone
 		}
-
 		//  collect the work request acks from servers b OMIT
 		for _, c := range dialedServers {
 			if isDead(c) {
 				debugF("server DOWN: %v\n", c)
 				continue
 			}
-			<-serverUpChan
+			<-serverWrkAcks
 			debugF("server up: %v\n", c)
 		}
 		// OMIT
