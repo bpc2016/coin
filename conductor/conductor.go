@@ -356,7 +356,7 @@ func skipF(c cpb.CoinClient, message string, err error) bool {
 	if err != nil {
 		log.Printf("SF: "+message+": %v", err)
 		if !isDead(c) {
-			close(active[c]) // so that we are active
+			close(active[c]) // so that we are truly dead
 		}
 		return true // we have skipped
 	}
