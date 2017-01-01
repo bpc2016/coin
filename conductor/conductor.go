@@ -88,8 +88,12 @@ func declareWin(theWinner chan string, lateEntry chan struct{},
 			str += fmt.Sprintf("miner %d:%s, nonce %d", index, coinbase, nonce)
 		}
 		theWinner <- str // HL
-		for _, c := range dialedServers {
+		for i, c := range dialedServers {
 			if isDead(c) {
+				continue
+			}
+			if i == index {
+				fmt.Println("DON'T TELL YOURSELF: ", i, c)
 				continue
 			}
 			annouceWin(c, 99, []byte{}, "EXTERNAL") // bogus  announcement
@@ -327,6 +331,7 @@ func main() {
 		}
 		// wait a bit - drain blockSendDone
 		for i := 0; i < numServers; i++ {
+			fmt.Println("blocksenddone")
 			<-blockSendDone
 		}
 		//  collect the work request acks from servers b OMIT
@@ -335,6 +340,7 @@ func main() {
 				debugF("server DOWN: %v\n", c)
 				continue
 			}
+			fmt.Println("serverWrkAcks")
 			<-serverWrkAcks
 			debugF("server up: %v\n", c)
 		}
@@ -346,11 +352,23 @@ func main() {
 			declareWin(theWinner, lateEntry, -1, // HL
 				"external", theNonce)
 		}
+		// drain stopLooking
+		done := false
+		for !done {
+			select {
+			case <-stopLooking:
+				fmt.Println("STOPLOOKING")
+			default:
+				done = true
+			}
+		}
+
 		//  wait for server cancellation responses
 		for _, c := range dialedServers {
 			if isDead(c) {
 				continue
 			}
+			fmt.Println("endLoop")
 			<-endLoop // wait for cancellation from each server
 		}
 		//  OMIT
