@@ -145,8 +145,9 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a  winner
-	run.winnerFound = true                                   // HL
-	resultchan <- *soln.Win                                  // HL
+	run.winnerFound = true  // HL
+	resultchan <- *soln.Win // HL
+	fmt.Printf("WINNER: %+v\n", *soln.Win)
 	fmt.Println("starting signout numminers = ", *numMiners) // OMIT
 	WaitFor(signOut, "out")
 	run.ch = make(chan struct{}) // HL
