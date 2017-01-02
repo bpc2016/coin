@@ -147,7 +147,7 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 	// we have a  winner
 	run.winnerFound = true  // HL
 	resultchan <- *soln.Win // HL
-	fmt.Printf("WINNER: %+v\n", *soln.Win)
+
 	fmt.Println("starting signout numminers = ", *numMiners) // OMIT
 	WaitFor(signOut, "out")
 	run.ch = make(chan struct{}) // HL
@@ -157,6 +157,7 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 
 // GetCancel broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
+	fmt.Println("CANCEL: ", in.Name)
 	signOut <- in.Name // HL
 	stop.Wait()        // HL
 	serv := *index
@@ -168,8 +169,13 @@ type server struct{}
 
 // IssueBlock receives the new block from Conductor : implements cpb.CoinServer
 func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cpb.IssueBlockReply, error) {
+	select { // in case we are holding previous block, discard it
+	case <-blockchan:
+	default:
+	}
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
 	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
+	fmt.Printf("ISSUEBLOCK\n")
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -275,11 +281,21 @@ func main() {
 			fmt.Printf("\n--------------------\nNew race!\n")
 			run.winnerFound = false // HL
 			stop.Add(1)             // HL
-			close(run.ch)           // HL
+			safeclose(run.ch)       // HL
 		}
 	}()
 	s := new(server)
 	g := grpc.NewServer()
 	cpb.RegisterCoinServer(g, s)
 	g.Serve(lis)
+}
+
+func safeclose(ch chan struct{}) {
+	fmt.Println("SAFECLOSE")
+	select {
+	case <-ch: // already closed!
+		return
+	default:
+		close(ch)
+	}
 }
