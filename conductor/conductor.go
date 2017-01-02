@@ -295,53 +295,53 @@ func drain(ch chan struct{}) {
 
 func main() {
 	flag.Parse()
-	/*
-		myServers := checkMandatoryF()
-		numServers = len(myServers)
-		active = make(map[cpb.CoinClient]chan (struct{}))
-		for index := 0; index < numServers; index++ {
-			addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
-			conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
-			if err != nil {
-				log.Fatalf("fail to dial: %v", err)
-			}
-			defer conn.Close()
-			c := cpb.NewCoinClient(conn) // note that we do not login!
-			dialedServers = append(dialedServers, c)
-			active[c] = make(chan struct{}, 1)
-			active[c] <- struct{}{} //  is alive!
-		} */
+	myServers := checkMandatoryF()
+	numServers = len(myServers)
+	active = make(map[cpb.CoinClient]chan (struct{}))
+	for index := 0; index < numServers; index++ {
+		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
+		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
+		if err != nil {
+			log.Fatalf("fail to dial: %v", err)
+		}
+		defer conn.Close()
+		c := cpb.NewCoinClient(conn) // note that we do not login!
+		dialedServers = append(dialedServers, c)
+		active[c] = make(chan struct{}, 1)
+		active[c] <- struct{}{} //  is alive!
+	}
 
 	// initialise
-	// stopLooking := make(chan string, numServers) // for search
 	theEnd := make(chan struct{}) // required because we use go routines ... exit (never)
+
+	// stopLooking := make(chan string, numServers) // for search
 	// theWinner := make(chan string)               //
 
 	// blockSendDone := make(chan struct{}, numServers)  //
 	// serverWrkAcks := make(chan *cpb.Work, numServers) // for gathering signin
 	// gotCancel := make(chan struct{}, numServers)      // for the next loop
 
-	again := make(chan struct{})                     // for firirng off external
-	result := make(chan string)                      // stores result of externals trials
+	startSearch := make(chan struct{})               // for firirng off external
+	winner := make(chan string)                      // stores result of externals trials
 	stopSearching := make(chan struct{}, numServers) // stop external
 
-	// external
+	// external (search)
 	// counts to timeOut unless disturbed
-	// starts with channel again
+	// starts with channel startSearch
 	go func() {
 		fmt.Println("STARTING ...")
 		tick := time.Tick(1 * time.Second)
 		for {
-			<-again // wait here
+			<-startSearch // wait here
 			carryOn := true
 			for cn := 0; carryOn; cn++ {
 				if cn >= *timeOut {
-					result <- "External" // external wins
+					winner <- "External" // external wins
 					carryOn = false
 				} else { // check for win
 					select {
 					case <-stopSearching:
-						result <- "Miner" // we win
+						winner <- "Miner" // we win
 						// drain stopSearching
 						drain(stopSearching)
 						carryOn = false
@@ -360,13 +360,14 @@ func main() {
 	replies := make(chan struct{}, numServers)
 	resultCopy := make(chan string)
 
-	// servers - receiving result
+	// servers - receiving winner
+	// sends replies back to conductor
 	go func() {
 		for {
-			r := <-result
+			r := <-winner
 			fmt.Println("Sending backs acks - cancels")
 			for c := range dialedServers {
-				fmt.Printf("result %s received by: %v\n", r, c)
+				fmt.Printf("winner %s received by: %v\n", r, c)
 				replies <- struct{}{}
 			}
 			resultCopy <- r // pass this on
@@ -397,14 +398,14 @@ func main() {
 			fmt.Println("Winner: ", r, "\n---------------")
 			// wait a bit
 			<-time.After(5 * time.Second)
-			again <- struct{}{}          // restart external
+			startSearch <- struct{}{}    // restart external
 			resultAnnounce <- struct{}{} // also miners search
 		}
 	}()
 
 	<-time.After(2 * time.Second)
 	fmt.Println("kick off ...")
-	again <- struct{}{} // kick off
+	startSearch <- struct{}{} // kick off
 
 	/*
 		// external
