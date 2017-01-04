@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -250,12 +249,23 @@ func declareWin(theWinner chan string,
 
 // active[c] is now a struct{} *buffered* channel that is empty
 // server c is no longer reachable. Tested by isDead(c)
-var active map[cpb.CoinClient]chan (struct{})
+var active, awake map[cpb.CoinClient]chan (struct{})
 
 func isDead(c cpb.CoinClient) bool {
 	select {
 	case <-active[c]:
 		active[c] <- struct{}{} // refill, so isDead again is false
+		return false
+	default:
+		return true // so active is empty
+	}
+}
+
+// higher status - now not asleep means has accepted a block
+func isAsleep(c cpb.CoinClient) bool {
+	select {
+	case <-awake[c]:
+		awake[c] <- struct{}{} // refill, so isAsleep again is false
 		return false
 	default:
 		return true // so active is empty
@@ -293,11 +303,103 @@ func drain(ch chan struct{}) {
 	}
 }
 
+// based on proto
+
+// getCancel makes a blocking request to the server
+func getCancelNew(c cpb.CoinClient, name string, gotCancel chan struct{}) {
+	_, err := c.GetCancel(context.Background(), &cpb.GetCancelRequest{Name: name})
+	if skipF(c, "could not request cancellation", err) {
+		return
+	}
+	gotCancel <- struct{}{} // acknowledge
+	// fmt.Println("GETCANCELNEW ISSUED")
+}
+
+// issue blocks
+func issueBlocks(cancelChan chan struct{}) {
+	blockSendDone := make(chan struct{}, numServers)  //
+	serverWrkAcks := make(chan *cpb.Work, numServers) // for gathering signin
+	// reset being awake
+	for _, c := range dialedServers {
+		drain(awake[c])
+	}
+	// the block ....
+	u, l, blk, m, h, bts := newBlock() // next block
+
+	for _, c := range dialedServers { // RANGE DIALED
+		go func(c cpb.CoinClient) {
+			_, err := c.IssueBlock(context.Background(), // HL
+				&cpb.IssueBlockRequest{ // HL
+					Upper:       u,   // OMIT
+					Lower:       l,   // OMIT
+					Block:       blk, // OMIT
+					Merkle:      m,   // OMIT
+					Blockheight: h,   // OMIT
+					Bits:        bts})
+			if skipF(c, "could not issue block", err) {
+				blockSendDone <- struct{}{}
+				return
+			}
+			blockSendDone <- struct{}{}
+			// get ready, get set ... this blocks!  OMIT
+			r, err := c.GetWork(context.Background(), // HL
+				&cpb.GetWorkRequest{Name: "EXTERNAL"}) // HL
+			if skipF(c, "could not reconnect", err) { // HL
+				return
+			} else if isDead(c) { // were we previously declared dead? change that ..
+				active[c] <- struct{}{} // 'revive' us
+			}
+			serverWrkAcks <- r.Work
+			awake[c] <- struct{}{} // register that this server is awake
+			go getCancelNew(c, "EXTERNAL", cancelChan)
+		}(c)
+	} // END  RANGE DIALED
+	// wait a bit drain blockSendDone
+	for i := 0; i < numServers; i++ {
+		// fmt.Println("blocksenddone")
+		<-blockSendDone
+	}
+	//  collect the work request acks from servers
+	for _, c := range dialedServers {
+		if isDead(c) {
+			debugF("server DOWN: %v\n", c)
+			continue
+		}
+		// fmt.Println("serverWrkAcks")
+		<-serverWrkAcks
+		debugF("server up: %v\n", c) // ?? how do we know
+	}
+}
+
+// getResult makes a blocking request to the server, comes back with theWinner
+func getResultNew(c cpb.CoinClient, name string, Winner chan *cpb.GetResultReply, ignore chan struct{}) {
+	res, err := c.GetResult(context.Background(), &cpb.GetResultRequest{Name: name})
+	if skipF(c, "could not request result", err) {
+		return
+	}
+	select {
+	case <-ignore:
+		ignore <- struct{}{} // shut the gate once more - revive
+		return               // we are too late
+	default: // carry on
+	}
+	// fmt.Println("GETRESULT CALL")
+	ignore <- struct{}{} // shut the gates
+	Winner <- res
+}
+
+type winStruct struct {
+	message string
+	source  int
+}
+
 func main() {
 	flag.Parse()
 	myServers := checkMandatoryF()
 	numServers = len(myServers)
 	active = make(map[cpb.CoinClient]chan (struct{}))
+	awake = make(map[cpb.CoinClient]chan (struct{}))
+	// dial them
 	for index := 0; index < numServers; index++ {
 		addr := fmt.Sprintf("%s:%d", myServers[index].host, 50051+myServers[index].port)
 		conn, err := grpc.Dial(addr, grpc.WithInsecure()) // HL
@@ -308,22 +410,18 @@ func main() {
 		c := cpb.NewCoinClient(conn) // note that we do not login!
 		dialedServers = append(dialedServers, c)
 		active[c] = make(chan struct{}, 1)
-		active[c] <- struct{}{} //  is alive!
+		active[c] <- struct{}{}           //  is alive!
+		awake[c] = make(chan struct{}, 1) // do not assume awake
 	}
 
 	// initialise
 	theEnd := make(chan struct{}) // required because we use go routines ... exit (never)
 
-	// stopLooking := make(chan string, numServers) // for search
-	// theWinner := make(chan string)               //
-
-	// blockSendDone := make(chan struct{}, numServers)  //
-	// serverWrkAcks := make(chan *cpb.Work, numServers) // for gathering signin
-	// gotCancel := make(chan struct{}, numServers)      // for the next loop
-
-	startSearch := make(chan struct{})               // for firirng off external
-	winner := make(chan string)                      // stores result of externals trials
-	stopSearching := make(chan struct{}, numServers) // stop external
+	startSearch := make(chan struct{})   // for firirng off external
+	winner := make(chan winStruct)       // stores result of externals trials
+	stopSearching := make(chan struct{}) // stop external
+	ignore := make(chan struct{})        // where to declare no more anouncements allowed
+	// theWinner := make(chan string)       //
 
 	// external (search)
 	// counts to timeOut unless disturbed
@@ -336,14 +434,19 @@ func main() {
 			carryOn := true
 			for cn := 0; carryOn; cn++ {
 				if cn >= *timeOut {
-					winner <- "External" // external wins
+					str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
+					str += "External"
+					winner <- winStruct{str, -1} // external wins
 					carryOn = false
 				} else { // check for win
 					select {
 					case <-stopSearching:
-						winner <- "Miner" // we win
+						fmt.Println("STOPPED!")
+						// winner <- theWinner
+						// str := <-theWinner
+						// winner <- winStruct{str, 0} // we win
 						// drain stopSearching
-						drain(stopSearching)
+						// drain(stopSearching)
 						carryOn = false
 					default: // continue
 					}
@@ -357,51 +460,101 @@ func main() {
 		}
 	}()
 
-	replies := make(chan struct{}, numServers)
-	resultCopy := make(chan string)
-
-	// servers - receiving winner
-	// sends replies back to conductor
+	// in parallel, listen for server announcement on getResult
 	go func() {
 		for {
-			r := <-winner
-			fmt.Println("Sending backs acks - cancels")
-			for c := range dialedServers {
-				fmt.Printf("winner %s received by: %v\n", r, c)
-				replies <- struct{}{}
+			// fmt.Println("GETRESULTS ..")
+			resCh := make(chan *cpb.GetResultReply)
+			for _, c := range dialedServers {
+				go getResultNew(c, "EXTERNAL", resCh, ignore)
 			}
-			resultCopy <- r // pass this on
+			<-ignore // wait here for a winner
+			// fmt.Println("GOT A WINNER 1 ....")
+			res := <-resCh
+			// fmt.Println("GOT A WINNER  2....", res.Winner.Identity)
+
+			// now declare the winner
+			if res.Winner.Identity != "EXTERNAL" { // avoid echoes
+				str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
+				str += fmt.Sprintf("miner %d:%s, nonce %d",
+					res.Index, res.Winner.Identity, res.Winner.Nonce)
+				// fmt.Println("GOT A WINNER 3 ....")
+				// theWinner <- str
+				winner <- winStruct{str, 0} // we win
+				// fmt.Println("GOT A WINNER 4 ....")
+				stopSearching <- struct{}{} // data on to external search
+				// fmt.Println("GOT A WINNER 5 ....")
+			}
 		}
 	}()
 
-	resultAnnounce := make(chan struct{})
-	// servers - alternate wins
+	replies := make(chan struct{}, numServers)
+	// resultCopy := make(chan string)
+
+	// servers - receiving winner
+	// sends replies back to conductor
+
+	// conductor main cycle
 	go func() {
 		for {
-			<-resultAnnounce
-			insert := rand.Intn(20)
-			fmt.Println("trying to beat external ... -> ", insert)
-			if insert < *timeOut-2 { // an option
-				<-time.After(time.Duration(insert) * time.Second)
-				stopSearching <- struct{}{}
-			} // else ignore it
+			win := <-winner
+			// fmt.Println("Sending backs acks - cancels? message:", win.message)
+			// fmt.Println("Announce Winner ...", win.message)
+			for _, c := range dialedServers {
+				if isAsleep(c) {
+					continue
+				}
+				if win.source != -1 {
+					// there should be additional data carried ...
+					// we want to avoid reflecting the win back there
+					// is c== then skip
+					if win.source == 0 { //FIX ME
+						continue
+					}
+				}
+				// fmt.Printf("ANNOUNCEWIN to %v\n", c)
+				annouceWin(c, 99, []byte{}, "EXTERNAL") // bogus  announcement
+			}
+			// resultCopy <- win.message // pass this on
+			// wait for cancellations
+			drain(replies)
+			// announce
+			fmt.Println("---------------\nWinner: ", win.message, "\n---------------")
+			// wait a bit
+			// <-time.After(2 * time.Second)
+			// awaken by issuing new blocks
+			issueBlocks(replies)
+			startSearch <- struct{}{} // restart external
+			// empty ignore
+			select {
+			case <-ignore: // this clears it
+			default: // is already empty
+			}
+
 		}
 	}()
 
 	// conductor
-	go func() {
-		for {
-			r := <-resultCopy // to sync
-			// wait for cancellations
-			drain(replies)
-			// announce
-			fmt.Println("Winner: ", r, "\n---------------")
-			// wait a bit
-			<-time.After(5 * time.Second)
-			startSearch <- struct{}{}    // restart external
-			resultAnnounce <- struct{}{} // also miners search
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		r := <-resultCopy // to sync
+	// 		// wait for cancellations
+	// 		drain(replies)
+	// 		// announce
+	// 		fmt.Println("Winner: ", r, "\n---------------")
+	// 		// wait a bit
+	// 		// <-time.After(2 * time.Second)
+	// 		// awaken by issuing new blocks
+	// 		issueBlocks(replies)
+	// 		startSearch <- struct{}{} // restart external
+	// 		// empty ignore
+	// 		select {
+	// 		case <-ignore: // this clears it
+	// 		default: // is already empty
+	// 		}
+	// 		// resultAnnounce <- struct{}{} // also miners search
+	// 	}
+	// }()
 
 	<-time.After(2 * time.Second)
 	fmt.Println("kick off ...")

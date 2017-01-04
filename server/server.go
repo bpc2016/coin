@@ -139,14 +139,20 @@ func setWork(name string) *cpb.Work {
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
+	// fmt.Printf("GOT ANNOUNCE: %v\n", *soln.Win)
 	run.Lock()
 	defer run.Unlock()
 	if run.winnerFound { // reject all but the first
+		fmt.Printf("PREV WINNER?\n")
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a  winner
+	// fmt.Printf("NEW WINNER *** \n")
+
 	run.winnerFound = true  // HL
 	resultchan <- *soln.Win // HL
+
+	// fmt.Printf("SWALLOWED ...\n")
 
 	fmt.Println("starting signout numminers = ", *numMiners) // OMIT
 	WaitFor(signOut, "out")
@@ -157,7 +163,7 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 
 // GetCancel broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
-	fmt.Println("CANCEL: ", in.Name)
+	// fmt.Println("CANCEL: ", in.Name)
 	signOut <- in.Name // HL
 	stop.Wait()        // HL
 	serv := *index
@@ -175,7 +181,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 	}
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
 	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
-	fmt.Printf("ISSUEBLOCK\n")
+	// fmt.Printf("ISSUEBLOCK\n")
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -204,7 +210,17 @@ func debugF(format string, args ...interface{}) {
 func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool) // HL
 	count := 1
-	alive[<-sign] = true // we need at least one! ... then the rest ...
+	who := ""
+	justonce := true
+	for justonce { // we want to be sure that at least one non-server FIXME
+		who = <-sign
+		alive[who] = true // we need at least one! ... then the rest ...
+		if who == "EXTERNAL" {
+			count++ // once more
+		} else {
+			justonce = false
+		}
+	}
 	stopWaiting := false
 	for i := 1; i < *numMiners; i++ {
 		select {
@@ -291,7 +307,7 @@ func main() {
 }
 
 func safeclose(ch chan struct{}) {
-	fmt.Println("SAFECLOSE")
+	// fmt.Println("SAFECLOSE")
 	select {
 	case <-ch: // already closed!
 		return
