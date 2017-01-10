@@ -419,16 +419,8 @@ func main() {
 			// announce
 			fmt.Println("---------------\nWinner: ", winner, "\n---------------")
 
-			// display the status
-			// serverConn.Lock()
-			// for _, c := range dialedServers {
-			// 	fmt.Printf("SERVER %v -- %d\n", c, serverConn.status[c])
-			// }
-			// serverConn.Unlock()
-
 			// awaken by issuing new blocks
 			issueBlocks(replies)
-
 			// restart search cycle
 			startSearch <- struct{}{} // restart external
 		}
@@ -444,8 +436,8 @@ func main() {
 
 // utilities
 
+// avoid closing an already closed channel
 func safeClose(ch chan struct{}) {
-	fmt.Println("SAFECLOSE")
 	select {
 	case <-ch: // already closed!
 		return
@@ -455,7 +447,6 @@ func safeClose(ch chan struct{}) {
 }
 
 func isDead(c cpb.CoinClient) bool {
-	// fmt.Printf(" ?isdead  %v\n", c)
 	dead := false
 	serverConn.Lock()
 	dead = serverConn.status[c] == 0
