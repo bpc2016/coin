@@ -86,7 +86,6 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	users.Lock()
 	defer users.Unlock()
 	nxtplus := users.countIN + 2
-	// fmt.Println("countIN:", users.countIN, " MINERS:", *numMiners)  // OMIT
 	if nxtplus == *numMiners {
 		return nil, errors.New("Capacity reached!")
 
@@ -117,7 +116,7 @@ func minerID(name string) int {
 }
 
 func setWork(name string) *cpb.Work {
-	fmt.Println("Setting work for: ", name)
+	// fmt.Println("Setting work for: ", name)
 	if name == "EXTERNAL" {
 		return &cpb.Work{Coinbase: []byte{}, Block: []byte{}, Skel: []byte{}}
 	}
@@ -140,15 +139,15 @@ func setWork(name string) *cpb.Work {
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	fmt.Printf("GOT ANNOUNCE: %v\n", *soln.Win)
+	// fmt.Printf("GOT ANNOUNCE: %v\n", *soln.Win)
 	run.Lock()
 	defer run.Unlock()
 	if run.winnerFound { // reject all but the first
-		fmt.Printf("PREV WINNER?\n")
+		// fmt.Printf("PREV WINNER?\n")
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a  winner
-	fmt.Printf("NEW WINNER *** \n")
+	// fmt.Printf("NEW WINNER *** \n")
 
 	run.winnerFound = true  // HL
 	resultchan <- *soln.Win // HL
@@ -180,7 +179,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 	}
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
 	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
-	fmt.Printf("ISSUEBLOCK\n")
+	// fmt.Printf("ISSUEBLOCK\n")
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -188,7 +187,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan // wait for a result
 	//fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
-	fmt.Printf("sendresult: %d\n", *index) // OMIT
+	fmt.Printf("sendresult: %d (FIXME)\n", *index) // OMIT
 	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
@@ -209,19 +208,6 @@ func debugF(format string, args ...interface{}) {
 func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool) // HL
 	count := 1
-	// who := ""
-	// justonce := true
-	// for justonce { // we want to be sure that at least one non-server FIXME
-	// 	who = <-sign
-	// 	fmt.Println("WAITFOR ", who)
-	// 	alive[who] = true // we need at least one! ... then the rest ...
-	// 	if who == "EXTERNAL" {
-	// 		count++ // once more
-	// 	} else {
-	// 		justonce = false
-	// 	}
-	// }
-
 	// we need at least one!
 	alive[<-sign] = true
 	//... then the rest ...
@@ -311,7 +297,6 @@ func main() {
 }
 
 func safeclose(ch chan struct{}) {
-	// fmt.Println("SAFECLOSE")
 	select {
 	case <-ch: // already closed!
 		return
