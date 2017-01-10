@@ -61,6 +61,7 @@ var (
 	stop       sync.WaitGroup // control cancellation issue
 	blockchan  chan blockdata // for incoming block
 	resultchan chan cpb.Win   // for the winner decision
+	serverID   string         // issued with block
 )
 
 var mysql map[uint32]string
@@ -162,10 +163,9 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 // GetCancel broadcasts a cancel instruction : implements cpb.CoinServer
 func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.GetCancelReply, error) {
 	// fmt.Println("CANCEL: ", in.Name)
-	signOut <- in.Name // HL
-	stop.Wait()        // HL
-	serv := *index
-	return &cpb.GetCancelReply{Index: uint32(serv)}, nil // HL
+	signOut <- in.Name
+	stop.Wait()
+	return &cpb.GetCancelReply{Server: serverID}, nil // FIXME  return serverID
 }
 
 // server is used to implement cpb.CoinServer.
@@ -178,6 +178,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 	default:
 	}
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
+	serverID = in.Server
 	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
 	// fmt.Printf("ISSUEBLOCK\n")
 	return &cpb.IssueBlockReply{Ok: true}, nil
@@ -188,7 +189,7 @@ func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.
 	result := <-resultchan // wait for a result
 	//fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
 	fmt.Printf("sendresult: %d (FIXME)\n", *index) // OMIT
-	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
+	return &cpb.GetResultReply{Winner: &result, Server: serverID}, nil
 }
 
 // WaitFor allows for the loss of a miners
