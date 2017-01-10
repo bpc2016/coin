@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	allowedTime          = 2  // "number of seconds before miner declared NOT alive"
+	allowedTime          = 1  // 2  // "number of seconds before miner declared NOT alive"
 	allowedConductorTime = 20 // number of seconds for the conductor
 )
 
@@ -117,6 +117,7 @@ func minerID(name string) int {
 }
 
 func setWork(name string) *cpb.Work {
+	fmt.Println("Setting work for: ", name)
 	if name == "EXTERNAL" {
 		return &cpb.Work{Coinbase: []byte{}, Block: []byte{}, Skel: []byte{}}
 	}
@@ -139,7 +140,7 @@ func setWork(name string) *cpb.Work {
 
 // Announce responds to a proposed solution : implements cpb.CoinServer
 func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.AnnounceReply, error) {
-	// fmt.Printf("GOT ANNOUNCE: %v\n", *soln.Win)
+	fmt.Printf("GOT ANNOUNCE: %v\n", *soln.Win)
 	run.Lock()
 	defer run.Unlock()
 	if run.winnerFound { // reject all but the first
@@ -147,12 +148,10 @@ func (s *server) Announce(ctx context.Context, soln *cpb.AnnounceRequest) (*cpb.
 		return &cpb.AnnounceReply{Ok: false}, nil
 	}
 	// we have a  winner
-	// fmt.Printf("NEW WINNER *** \n")
+	fmt.Printf("NEW WINNER *** \n")
 
 	run.winnerFound = true  // HL
 	resultchan <- *soln.Win // HL
-
-	// fmt.Printf("SWALLOWED ...\n")
 
 	fmt.Println("starting signout numminers = ", *numMiners) // OMIT
 	WaitFor(signOut, "out")
@@ -181,7 +180,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 	}
 	blockchan <- blockdata{in.Lower, in.Upper, in.Blockheight, in.Block, in.Merkle, in.Bits}
 	users.loggedIn["EXTERNAL"] = 0 //1 // we login conductor here FIXME 0 is magic for external
-	// fmt.Printf("ISSUEBLOCK\n")
+	fmt.Printf("ISSUEBLOCK\n")
 	return &cpb.IssueBlockReply{Ok: true}, nil
 }
 
@@ -210,17 +209,22 @@ func debugF(format string, args ...interface{}) {
 func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool) // HL
 	count := 1
-	who := ""
-	justonce := true
-	for justonce { // we want to be sure that at least one non-server FIXME
-		who = <-sign
-		alive[who] = true // we need at least one! ... then the rest ...
-		if who == "EXTERNAL" {
-			count++ // once more
-		} else {
-			justonce = false
-		}
-	}
+	// who := ""
+	// justonce := true
+	// for justonce { // we want to be sure that at least one non-server FIXME
+	// 	who = <-sign
+	// 	fmt.Println("WAITFOR ", who)
+	// 	alive[who] = true // we need at least one! ... then the rest ...
+	// 	if who == "EXTERNAL" {
+	// 		count++ // once more
+	// 	} else {
+	// 		justonce = false
+	// 	}
+	// }
+
+	// we need at least one!
+	alive[<-sign] = true
+	//... then the rest ...
 	stopWaiting := false
 	for i := 1; i < *numMiners; i++ {
 		select {
