@@ -229,6 +229,11 @@ func condResult(lateWin chan struct{}) {
 	}
 }
 
+// canonical name of server at c
+func serverName(c cpb.CoinClient) string {
+	return fmt.Sprintf("%v", c)
+}
+
 // based on product2 (jan 10)
 
 // issue blocks
@@ -246,13 +251,14 @@ func issueBlocks(cancelChan chan struct{}) {
 	for _, c := range dialedServers { // RANGE DIALED
 		go func(c cpb.CoinClient, lateWin chan struct{}) {
 			_, err := c.IssueBlock(context.Background(), // HL
-				&cpb.IssueBlockRequest{ // HL
-					Upper:       u,   // OMIT
-					Lower:       l,   // OMIT
-					Block:       blk, // OMIT
-					Merkle:      m,   // OMIT
-					Blockheight: h,   // OMIT
-					Bits:        bts})
+				&cpb.IssueBlockRequest{
+					Upper:       u,
+					Lower:       l,
+					Block:       blk,
+					Merkle:      m,
+					Blockheight: h,
+					Bits:        bts,
+					Server:      serverName(c)})
 			if skipServer(c, "could not issue block", err) {
 				blockSendDone <- struct{}{}
 				return
@@ -304,7 +310,7 @@ func issueBlocks(cancelChan chan struct{}) {
 
 type winStruct struct {
 	message string
-	source  int
+	source  string
 }
 
 type lockMap struct {
@@ -376,26 +382,24 @@ func main() {
 			str := fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
 			winStr := "External"
 			str += winStr
-			win := winStruct{str, -1} // default is external
+			win := winStruct{str, "EXTERNAL"} // default is external
 			// now declare the winner
 			if res.Winner.Identity != "EXTERNAL" { // avoid echoes
 				str = fmt.Sprintf("%s - ", time.Now().Format("15:04:05"))
-				winStr = fmt.Sprintf("miner %d:%s, nonce %d",
-					res.Index, res.Winner.Identity, res.Winner.Nonce)
+				winStr = fmt.Sprintf("miner %s:%s, nonce %d",
+					res.Server, res.Winner.Identity, res.Winner.Nonce)
 				str += winStr
-				win = winStruct{str, 0}     // we win
-				stopSearching <- struct{}{} // data on to external search
+				win = winStruct{str, res.Server} // a miner wins
+				stopSearching <- struct{}{}      // data on to external search
 			}
 			for _, c := range dialedServers {
 				// if isAsleep(c) {
 				if isDead(c) {
 					continue
 				}
-				if win.source != -1 {
-					// there should be additional data carried ...
+				if win.source != "EXTERNAL" {
 					// we want to avoid reflecting the win back there
-					// is c== then skip
-					if win.source == 0 { //FIX ME
+					if win.source == serverName(c) {
 						continue
 					}
 				}
