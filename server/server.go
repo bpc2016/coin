@@ -191,19 +191,6 @@ func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.
 	return &cpb.GetResultReply{Winner: &result, Index: uint32(*index)}, nil
 }
 
-// utilities
-func fatalF(message string, err error) {
-	if err != nil {
-		log.Fatalf(message+": %v", err)
-	}
-}
-
-func debugF(format string, args ...interface{}) {
-	if *debug {
-		log.Printf(format, args...)
-	}
-}
-
 // WaitFor allows for the loss of a miners
 func WaitFor(sign chan string, direction string) {
 	alive := make(map[string]bool) // HL
@@ -296,6 +283,19 @@ func main() {
 	g.Serve(lis)
 }
 
+// utilities -----------------------------------------------------------------------------------
+
+func fatalF(message string, err error) {
+	if err != nil {
+		log.Fatalf(message+": %v", err)
+	}
+}
+
+func debugF(format string, args ...interface{}) {
+	if *debug {
+		log.Printf(format, args...)
+	}
+}
 func safeclose(ch chan struct{}) {
 	select {
 	case <-ch: // already closed!
