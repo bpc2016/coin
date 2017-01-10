@@ -56,6 +56,7 @@ message IssueBlockRequest {
   bytes block = 4;        // blockheader
   bytes merkle = 5;       // merkle root skeleton
   uint32 bits = 6;        // for target computation
+  string server = 7;      // this is how conductor issues server name
 }
 
 // GetResult requests carries the same name as login
@@ -78,9 +79,9 @@ message AnnounceReply {
   bool ok = 1;
 }
 
-// GetCancel response is the index of server
+// GetCancel response is the canonical name of server // index of server
 message GetCancelReply {
-  uint32 index = 1;
+  string server = 1; // uint32 index = 1;
 }
 
 // IssueBlock response is boolean
@@ -88,10 +89,10 @@ message IssueBlockReply {
   bool ok = 1;
 }
 
-// GetResult response is the winner details + server index
+// GetResult response is the winner details + server name // index
 message GetResultReply {
   Win winner = 1;
-  uint32 index = 2;
+  string server = 2;  // uint32 index = 2;
 }
 
 message Work {
