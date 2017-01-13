@@ -75,6 +75,7 @@ func search(work *cpb.Work, stopLooking chan struct{}) (uint32, bool) {
 	tick := time.Tick(1 * time.Second)
 	for cn := 0; ; cn++ {
 		if rolls(*tosses) { // a win?
+			// if cn == 6 { // debug - all fire at once
 			theNonce = uint32(cn)
 			debugF("winning! nonce: %d\n", cn)
 			ok = true

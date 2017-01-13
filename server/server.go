@@ -89,7 +89,6 @@ func (s *server) Login(ctx context.Context, in *cpb.LoginRequest) (*cpb.LoginRep
 	nxtplus := users.countIN + 2
 	if nxtplus == *numMiners {
 		return nil, errors.New("Capacity reached!")
-
 	}
 	// authenticate user
 	login, nogood := auth(in.Name, in.Time, in.User)
@@ -165,7 +164,7 @@ func (s *server) GetCancel(ctx context.Context, in *cpb.GetCancelRequest) (*cpb.
 	// fmt.Println("CANCEL: ", in.Name)
 	signOut <- in.Name
 	stop.Wait()
-	return &cpb.GetCancelReply{Server: serverID}, nil // FIXME  return serverID
+	return &cpb.GetCancelReply{Server: serverID}, nil
 }
 
 // server is used to implement cpb.CoinServer.
@@ -188,7 +187,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan // wait for a result
 	//fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
-	fmt.Printf("sendresult: %d (FIXME)\n", *index) // OMIT
+	fmt.Printf("sendresult: %d\n", serverID) // OMIT
 	return &cpb.GetResultReply{Winner: &result, Server: serverID}, nil
 }
 
