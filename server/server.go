@@ -187,7 +187,7 @@ func (s *server) IssueBlock(ctx context.Context, in *cpb.IssueBlockRequest) (*cp
 func (s *server) GetResult(ctx context.Context, in *cpb.GetResultRequest) (*cpb.GetResultReply, error) {
 	result := <-resultchan // wait for a result
 	//fmt.Printf("sendresult: %d, %v\n", *index, result) // OMIT
-	fmt.Printf("sendresult: %d\n", serverID) // OMIT
+	fmt.Printf("sendresult: %s\n", serverID) // OMIT
 	return &cpb.GetResultReply{Winner: &result, Server: serverID}, nil
 }
 
